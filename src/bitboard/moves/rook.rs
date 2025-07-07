@@ -58,11 +58,10 @@ impl Bitboard {
         }
 
         if (opponent_pieces & to_mask) == 0 {
-            self.rook_push(from_mask, to_mask, is_white);
+            self.rook_push(from_mask, to_mask, is_white)
         } else {
-            self.rook_capture(from_mask, to_mask, opponent_pieces, is_white);
+            self.rook_capture(from_mask, to_mask, opponent_pieces, is_white)
         }
-        true
     }
 
     fn rook_push(&mut self, from_mask: u64, to_mask: u64, is_white: bool) -> bool {
