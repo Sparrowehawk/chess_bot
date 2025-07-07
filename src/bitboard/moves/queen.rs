@@ -77,28 +77,7 @@ impl Bitboard {
             return false;
         }
 
-        if (opponent_pieces & to_mask) == 0 {
-            self.queen_push(from_mask, to_mask, is_white)
-        } else {
-            self.queen_capture(from_mask, to_mask, opponent_pieces, is_white)
-        }
-    }
-
-    fn queen_push(&mut self, from_mask: u64, to_mask: u64, is_white: bool) -> bool {
-        self.apply_move(from_mask, to_mask, Piece::Queen, is_white);
-        true
-    }
-
-    fn queen_capture(
-        &mut self,
-        from_mask: u64,
-        to_mask: u64,
-        opponent_pieces: u64,
-        is_white: bool,
-    ) -> bool {
-        if (opponent_pieces & to_mask) == 0 {
-            return false;
-        } else {
+        if (opponent_pieces & to_mask) != 0 {
             self.clear_piece(to_mask, !is_white);
         }
         self.apply_move(from_mask, to_mask, Piece::Queen, is_white);

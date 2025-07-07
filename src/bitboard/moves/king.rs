@@ -25,37 +25,7 @@ impl Bitboard {
         if file_distance > 1 || rank_distance > 1 {
             return false; 
         }
-        if (opponent_pieces & to_mask) == 0 {
-            self.king_move(from_mask, to_mask, is_white)
-        } else {
-            self.king_capture(from_mask, to_mask, opponent_pieces, is_white)
-        }
-    }
-
-    fn king_move(
-        &mut self,
-        from_mask: u64,
-        to_mask: u64,
-        is_white: bool,
-    ) -> bool {
-        if (self.all_pieces() & to_mask) != 0 {
-            return false;
-        }
-
-        self.apply_move(from_mask, to_mask, Piece::King, is_white);
-        true
-    }
-
-    fn king_capture(
-        &mut self,
-        from_mask: u64,
-        to_mask: u64,
-        opponent_pieces: u64,
-        is_white: bool,
-    ) -> bool {
-        if (opponent_pieces & to_mask) == 0 {
-            return false;
-        } else {
+        if (opponent_pieces & to_mask) != 0 {
             self.clear_piece(to_mask, !is_white);
         }
         self.apply_move(from_mask, to_mask, Piece::King, is_white);
