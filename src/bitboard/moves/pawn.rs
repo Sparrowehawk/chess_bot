@@ -15,6 +15,8 @@ impl Bitboard {
             return false;
         }
 
+        println!("{from}, {to}");
+
         if self.is_pawn_capture(from, to, is_white) {
             self.pawn_capture(from_mask, to_mask, opponent_pieces, is_white)
         } else {
