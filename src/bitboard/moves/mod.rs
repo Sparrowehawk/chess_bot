@@ -1,4 +1,5 @@
 pub mod pawn;
+pub mod rook;
 
 use crate::bitboard::{Bitboard, Piece};
 

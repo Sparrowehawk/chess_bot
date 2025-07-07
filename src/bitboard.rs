@@ -1,19 +1,20 @@
 pub mod display;
 pub mod moves;
 
+#[derive(Clone)] // Mainly used in tests
 pub struct Bitboard {
-    white_king: u64,
-    white_queen: u64,
-    white_rook: u64,
-    white_bishop: u64,
-    white_knight: u64,
-    white_pawns: u64,
-    black_king: u64,
-    black_queen: u64,
-    black_rook: u64,
-    black_bishop: u64,
-    black_knight: u64,
-    black_pawns: u64,
+    pub white_king: u64,
+    pub white_queen: u64,
+    pub white_rook: u64,
+    pub white_bishop: u64,
+    pub white_knight: u64,
+    pub white_pawns: u64,
+    pub black_king: u64,
+    pub black_queen: u64,
+    pub black_rook: u64,
+    pub black_bishop: u64,
+    pub black_knight: u64,
+    pub black_pawns: u64,
 }
 pub enum Piece {
     King, Queen, Rook, Bishop, Knight, Pawn, 
