@@ -1,5 +1,8 @@
+use crate::Game;
+
 pub mod display;
 pub mod moves;
+
 
 #[derive(Clone)] // Mainly used in tests
 pub struct Bitboard {
@@ -45,28 +48,6 @@ impl Bitboard {
 
     pub fn all_pieces(&self) -> u64 {
         self.white_pieces() | self.black_pieces()
-    }
-
-    pub fn make_move(&mut self, from: usize, to: usize, is_white: bool) -> bool {
-        let from_mask = 1u64 << from;
-
-        if (self.white_pawns | self.black_pawns) & from_mask != 0 {
-            self.move_pawn(from, to, is_white)
-        } else if (self.white_knight | self.black_knight) & from_mask != 0 {
-            self.move_knight(from, to, is_white)
-        } else if (self.white_bishop | self.black_bishop) & from_mask != 0 {
-            self.move_bishop(from, to, is_white)
-        } else if (self.white_rook | self.black_rook) & from_mask != 0 {
-            self.move_rook(from, to, is_white)
-        } else if (self.white_queen | self.black_queen) & from_mask != 0 {
-            self.move_queen(from, to, is_white)
-        } else if (self.white_king | self.black_king) & from_mask != 0 {
-            self.move_king(from, to, is_white)
-        } else {
-            // No piece was on the 'from' square
-            false
-        }
-
     }
 
 }

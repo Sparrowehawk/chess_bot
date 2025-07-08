@@ -5,8 +5,6 @@ pub mod bishop;
 pub mod knight;
 pub mod pawn;
 
-
-
 use crate::bitboard::{Bitboard, Piece};
 
 impl Bitboard {
@@ -14,6 +12,7 @@ impl Bitboard {
         let tmp_board = self.get_mut_board(piece, is_white);
         *tmp_board &= !from_mask;
         *tmp_board |= to_mask;
+
     }
 
     fn clear_piece(&mut self, mask: u64, is_white: bool) {
