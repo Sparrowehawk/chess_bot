@@ -38,7 +38,7 @@ fn setup_board(
 fn test_white_pawn_single_push() {
     let mut board = setup_board(Some(12), None, None); // e2
     let mut new_ep_target = None;
-    assert!(board.move_pawn(12, 20, true, None, &mut new_ep_target));
+    assert!(board.move_pawn(12, 20, true, None, &mut new_ep_target, None));
     assert_eq!(board.white_pawns, 1u64 << 20);
     assert_eq!(new_ep_target, None); // Single push should not set ep target
 }

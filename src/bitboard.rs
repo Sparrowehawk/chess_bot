@@ -16,6 +16,7 @@ pub struct Bitboard {
     pub black_knight: u64,
     pub black_pawns: u64,
 }
+#[derive(Debug)]
 pub enum Piece {
     King,
     Queen,

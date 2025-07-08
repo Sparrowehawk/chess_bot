@@ -23,7 +23,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_valid_move_horizontal() {
         let mut board = setup_board();
