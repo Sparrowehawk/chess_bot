@@ -1,8 +1,5 @@
-use crate::Game;
-
 pub mod display;
 pub mod moves;
-
 
 #[derive(Clone)] // Mainly used in tests
 pub struct Bitboard {
@@ -20,7 +17,12 @@ pub struct Bitboard {
     pub black_pawns: u64,
 }
 pub enum Piece {
-    King, Queen, Rook, Bishop, Knight, Pawn, 
+    King,
+    Queen,
+    Rook,
+    Bishop,
+    Knight,
+    Pawn,
 }
 
 impl Bitboard {
@@ -50,6 +52,115 @@ impl Bitboard {
         self.white_pieces() | self.black_pieces()
     }
 
+    pub fn possible_check(&self, position: usize, attacked_is_white: bool) -> bool {
+        let (
+            opponent_pawn,
+            opponent_knight,
+            opponent_bishop,
+            opponent_rook,
+            opponent_queen,
+            opponent_king,
+        ) = if attacked_is_white {
+            (
+                self.white_pawns,
+                self.white_knight,
+                self.white_bishop,
+                self.white_rook,
+                self.white_queen,
+                self.white_king,
+            )
+        } else {
+            (
+
+                self.black_pawns,
+                self.black_knight,
+                self.black_bishop,
+                self.black_rook,
+                self.black_queen,
+                self.black_king,
+            )
+        };
+
+
+        let pawn_attacks = if attacked_is_white { [7, 9] } else { [-7, -9] };
+        for attacks in pawn_attacks {
+            let from_square = (position as isize) + attacks;
+            if (0..64).contains(&from_square)
+                && (opponent_pawn & (1u64 << from_square)) != 0 {
+                    // Wrap around check
+                    let from_file = (from_square as usize) % 8;
+                    let to_file = position % 8;
+                    if (from_file as i8 - to_file as i8).abs() == 1 {
+                        return true;
+                    }
+                }
+        }
+
+
+        let knight_attacks = [-17, -15, -10, -6, 6, 10, 15, 17];
+        for attacks in knight_attacks {
+            let from_square = (position as isize) + attacks;
+            if (0..64).contains(&from_square)
+                && (opponent_knight & (1u64 << from_square)) != 0 {
+                    // Wrap around check
+                    let from_file = (from_square as usize) % 8;
+                    let to_file = position % 8;
+                    if (from_file as i8 - to_file as i8).abs() == 1 {
+                        return true;
+                    }
+                }
+        }
+
+
+        // Sliding attack
+        let all_pieces = self.all_pieces();
+        let bishop_queen = opponent_bishop | opponent_queen;
+        let rook_queen = opponent_rook | opponent_queen;
+
+        let directions = [-8, 8, 1, -1, -7, -9, 7, 9];
+        for (i, &dir) in directions.iter().enumerate() {
+            for n in 1..8 {
+                let target = (position as isize) +dir * n;
+                if !(0..64).contains(&target) {
+                    break;
+                }
+
+                let from_file = ((target - dir) as usize) % 8;
+                let to_file = ((target - dir) as usize) % 8;
+                if (from_file as i8 - to_file as i8).abs() > 1 {
+                    break;
+                }
+
+                let target_mask = 1u64 << target;
+                if (all_pieces & target_mask) != 0 {
+                    if i < 4 {
+                        if (rook_queen & target_mask) != 0 {
+                            println!("{n}");
+                            return true;
+                        }
+                    } else if (bishop_queen & target_mask) != 0 {
+                        return true;
+                    }
+                    break;
+                }
+            }
+        }
+
+
+        // King moves
+        for offset in directions {
+            let from_square = { position as isize } + offset;
+            if from_square > 0 && from_square < 64
+                && (opponent_king & (1u64 << from_square)) != 0 {
+                    let from_file = (from_square as usize) % 8;
+                    let to_file = position % 8;
+                    if (from_file as i8 - to_file as i8).abs() <= 1 {
+                        return true;
+                    }
+                }
+        }
+        false
+    }
 }
 
 impl Default for Bitboard {

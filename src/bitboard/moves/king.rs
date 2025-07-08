@@ -1,7 +1,7 @@
 use crate::bitboard::{Bitboard, Piece};
 
 impl Bitboard {
-    pub fn move_king(&mut self, from: usize, to: usize, is_white: bool) -> bool {
+    pub fn move_king(&mut self, from: usize, to: usize, is_white: bool, castling: &mut u8) -> bool {
         let from_mask = 1u64 << from;
         let to_mask = 1u64 << to;
 
@@ -15,20 +15,62 @@ impl Bitboard {
             return false;
         }
 
+        // Check for castling here
+        if is_white {
+            if from == 4 && to == 6 && ((*castling & (1 << 3)) != 0) {
+                // Castle king side
+                if (self.white_rook & (1 << 7) == 0)
+                    || (self.all_pieces() & (1 << 5) != 0)
+                    || (self.all_pieces() & (1 << 6) != 0)
+                {
+                    return false;
+                }
+            } else if from == 4 && to == 2 && ((*castling & (1 << 2)) != 0) {
+                // Castle queen side
+                if (self.white_rook & (1 << 0) == 0)
+                    || (self.all_pieces() & (1 << 1) != 0)
+                    || (self.all_pieces() & (1 << 2) != 0)
+                    || (self.all_pieces() & (1 << 3) != 0)
+                {
+                    return false;
+                }
+            }
+        } else if from == 60 && to == 62 && ((*castling & (1 << 1)) != 0) {
+            // Castle king side
+            if (self.black_rook & (1 << 63) == 0)
+                || (self.all_pieces() & (1 << 61) != 0)
+                || (self.all_pieces() & (1 << 62) != 0)
+            {
+                return false;
+            }
+        } else if from == 60 && to == 58 && ((*castling & (1 << 2)) != 0) {
+            // Castle queen side
+            if (self.black_rook & (1 << 56) == 0)
+                || (self.all_pieces() & (1 << 57) != 0)
+                || (self.all_pieces() & (1 << 58) != 0)
+                || (self.all_pieces() & (1 << 59) != 0)
+            {
+                return false;
+            }
+        }
+
         // Essentially, the king can move +/- 1, 7, 8, 9
         let from_file = from % 8;
         let to_file = to % 8;
 
         let file_distance = (from_file as i8 - to_file as i8).abs();
-        let rank_distance = ( (from / 8) as i8 - (to / 8) as i8 ).abs();
+        let rank_distance = ((from / 8) as i8 - (to / 8) as i8).abs();
 
         if file_distance > 1 || rank_distance > 1 {
-            return false; 
+            return false;
         }
         if (opponent_pieces & to_mask) != 0 {
             self.clear_piece(to_mask, !is_white);
         }
         self.apply_move(from_mask, to_mask, Piece::King, is_white);
+
+        // Clear both king-side and queen-side castling rights for the moving side
+        *castling &= if is_white { !(0b1100) } else { !(0b0011) };
         true
     }
 }
