@@ -1,140 +1,211 @@
+use chess_bot::bitboard::Bitboard;
+
+
 #[cfg(test)]
 mod tests {
-    use chess_bot::bitboard::Bitboard;
+    use super::*;
 
-    fn setup_board(rook_pos: usize, opponent_pos: Option<usize>) -> Bitboard {
-        let mut board = Bitboard {
-            white_king: 0,
+    // Helper function to create a clean board for each test
+    fn setup_board() -> Bitboard {
+        Bitboard {
             white_queen: 0,
             white_rook: 0,
             white_bishop: 0,
             white_knight: 0,
-            white_pawns: 0,
-            black_king: 0,
             black_queen: 0,
             black_rook: 0,
             black_bishop: 0,
             black_knight: 0,
-            black_pawns: 0,
-        };
-
-        board.white_rook |= 1u64 << rook_pos;
-
-        if let Some(pos) = opponent_pos {
-            board.black_pawns |= 1u64 << pos;
-        }
-        board
-    }
-
-    // --- VALID MOVES (PUSHES) ---
-
-    #[test]
-    fn test_rook_move_horizontal_empty_board() {
-        let mut board = setup_board(27, None); // Rook at d4
-        assert!(board.move_rook(27, 31, true)); // Move to h4
-        assert_eq!(board.white_rook, 1u64 << 31);
-        assert_eq!(board.all_pieces(), 1u64 << 31);
-    }
-
-    #[test]
-    fn test_rook_move_vertical_empty_board() {
-        let mut board = setup_board(27, None); // Rook at d4
-        assert!(board.move_rook(27, 3, true)); // Move to d1
-        assert_eq!(board.white_rook, 1u64 << 3);
-    }
-
-    #[test]
-    fn test_black_rook_move_vertical() {
-        // Set up a custom board instead of the default one
-        let mut board = Bitboard {
             white_king: 0,
-            white_queen: 0,
-            white_rook: 0,
-            white_bishop: 0,
-            white_knight: 0,
             white_pawns: 0,
             black_king: 0,
-            black_queen: 0,
-            black_rook: 1u64 << 63, // Black rook at h8
-            black_bishop: 0,
-            black_knight: 0,
             black_pawns: 0,
-        };
-
-        // Now the move is on an empty path and should succeed
-        assert!(board.move_rook(63, 47, false));
-        assert_eq!(board.black_rook, 1u64 << 47);
+        }
     }
 
-    // --- VALID CAPTURES ---
 
     #[test]
-    fn test_rook_capture_horizontal() {
-        let mut board = setup_board(27, Some(31)); // White rook at d4, black pawn at h4
-        assert!(board.move_rook(27, 31, true));
-        assert_eq!(board.white_rook, 1u64 << 31); // Rook moved
-        assert_eq!(board.black_pawns, 0); // Pawn was captured
-        assert_eq!(board.all_pieces(), 1u64 << 31);
-    }
+    fn test_valid_move_horizontal() {
+        let mut board = setup_board();
+        let from = 0; // a1
+        let to = 5;   // f1
+        board.white_rook = 1u64 << from;
+        let mut castling = 0b1111;
 
-    #[test]
-    fn test_rook_capture_vertical() {
-        let mut board = setup_board(27, Some(59)); // White rook at d4, black pawn at d8
-        assert!(board.move_rook(27, 59, true));
-        assert_eq!(board.white_rook, 1u64 << 59);
-        assert_eq!(board.black_pawns, 0);
-    }
+        let result = board.move_rook(from, to, true, &mut castling);
 
-    // --- INVALID MOVES ---
-
-    #[test]
-    fn test_rook_invalid_diagonal_move() {
-        let mut board = setup_board(27, None); // Rook at d4
-        assert!(!board.move_rook(27, 36, true)); // Attempt to move to e5
-        assert_eq!(board.white_rook, 1u64 << 27); // Rook has not moved
+        assert!(result);
+        assert_eq!(board.white_rook, 1u64 << to);
+        assert_eq!(board.all_pieces() & (1u64 << from), 0);
     }
 
     #[test]
-    fn test_rook_move_to_friendly_piece() {
-        let mut board = setup_board(27, None);
-        board.white_pawns |= 1u64 << 29; // Friendly pawn at f4
-        assert!(!board.move_rook(27, 29, true)); // Attempt to move to f4
-        assert_eq!(board.white_rook, 1u64 << 27); // Rook has not moved
+    fn test_valid_move_vertical() {
+        let mut board = setup_board();
+        let from = 0; // a1
+        let to = 56;  // a8
+        board.white_rook = 1u64 << from;
+        let mut castling = 0b1111;
+
+        let result = board.move_rook(from, to, true, &mut castling);
+
+        assert!(result);
+        assert_eq!(board.white_rook, 1u64 << to);
     }
 
     #[test]
-    fn test_move_non_existent_rook() {
-        let mut board = setup_board(27, None); // Rook at d4
-        assert!(!board.move_rook(0, 8, true)); // No rook at a1
+    fn test_valid_capture() {
+        let mut board = setup_board();
+        let from = 0; // a1
+        let to = 56;  // a8
+        board.white_rook = 1u64 << from;
+        board.black_pawns = 1u64 << to;
+        let mut castling = 0b1111;
+
+        let result = board.move_rook(from, to, true, &mut castling);
+
+        assert!(result);
+        assert_eq!(board.white_rook, 1u64 << to);
+        assert_eq!(board.black_pawns, 0); // Opponent pawn should be gone
+    }
+    
+    #[test]
+    fn test_black_rook_move() {
+        let mut board = setup_board();
+        let from = 63; // h8
+        let to = 56;   // a8
+        board.black_rook = 1u64 << from;
+        let mut castling = 0b1111;
+
+        let result = board.move_rook(from, to, false, &mut castling);
+
+        assert!(result);
+        assert_eq!(board.black_rook, 1u64 << to);
     }
 
-    // --- BLOCKED PATHS ---
-
     #[test]
-    fn test_rook_path_blocked_horizontal_by_opponent() {
-        let mut board = setup_board(24, Some(27)); // Rook at a4, opponent at d4
-        assert!(!board.move_rook(24, 31, true)); // Attempt to move to h4 (blocked)
+    fn test_invalid_move_diagonal() {
+        let mut board = setup_board();
+        let from = 0; // a1
+        let to = 9;   // b2
+        board.white_rook = 1u64 << from;
+        let mut castling = 0b1111;
+
+        let result = board.move_rook(from, to, true, &mut castling);
+
+        assert!(!result);
+        assert_eq!(board.white_rook, 1u64 << from); // Position should not change
     }
 
     #[test]
-    fn test_rook_path_blocked_vertical_by_friendly() {
-        let mut board = setup_board(4, None); // Rook at e1
-        board.white_pawns |= 1u64 << 20; // Friendly pawn at e3
-        assert!(!board.move_rook(4, 36, true)); // Attempt to move to e5 (blocked)
+    fn test_invalid_move_through_piece_horizontal() {
+        let mut board = setup_board();
+        let from = 0; // a1
+        let to = 7;   // h1
+        board.white_rook = 1u64 << from;
+        board.white_pawns = 1u64 << 3; // Place a friendly pawn at d1
+        let mut castling = 0b1111;
+
+        let result = board.move_rook(from, to, true, &mut castling);
+
+        assert!(!result);
+        assert_eq!(board.white_rook, 1u64 << from);
     }
 
     #[test]
-    fn test_rook_path_blocked_at_destination_by_friendly() {
-        let mut board = setup_board(0, None); // Rook at a1
-        board.white_pawns |= 1u64 << 56; // Friendly pawn at a8
-        assert!(!board.move_rook(0, 56, true)); // Attempt to move to a8
+    fn test_invalid_move_through_piece_vertical() {
+        let mut board = setup_board();
+        let from = 0; // a1
+        let to = 56;  // a8
+        board.white_rook = 1u64 << from;
+        board.black_pawns = 1u64 << 24; // Place an enemy pawn at a4
+        let mut castling = 0b1111;
+
+        let result = board.move_rook(from, to, true, &mut castling);
+
+        assert!(!result);
+        assert_eq!(board.white_rook, 1u64 << from);
     }
 
     #[test]
-    fn test_rook_path_clear_for_capture() {
-        // Path is clear right up to the capture square
-        let mut board = setup_board(24, Some(31)); // Rook a4, opponent h4
-        assert!(board.move_rook(24, 31, true));
-        assert_eq!(board.white_rook, 1u64 << 31);
+    fn test_invalid_move_to_friendly_piece() {
+        let mut board = setup_board();
+        let from = 0; // a1
+        let to = 7;   // h1
+        board.white_rook = (1u64 << from) | (1u64 << to); // Two white rooks
+        let mut castling = 0b1111;
+
+        let result = board.move_rook(from, to, true, &mut castling);
+
+        assert!(!result);
+        assert_eq!(board.white_rook, (1u64 << from) | (1u64 << to));
+    }
+
+    #[test]
+    fn test_move_white_queenside_rook_removes_castling_right() {
+        let mut board = setup_board();
+        let from = 0; // a1
+        let to = 1;   // b1
+        board.white_rook = 1u64 << from;
+        let mut castling = 0b1111; // All rights available
+
+        board.move_rook(from, to, true, &mut castling);
+
+        // White queen-side right (bit 2) should be removed. 0b1111 -> 0b1011
+        assert_eq!(castling, 0b1011);
+    }
+    
+    #[test]
+    fn test_move_white_kingside_rook_removes_castling_right() {
+        let mut board = setup_board();
+        let from = 7; // h1
+        let to = 6;   // g1
+        board.white_rook = 1u64 << from;
+        let mut castling = 0b1111; // All rights available
+
+        board.move_rook(from, to, true, &mut castling);
+
+        // White king-side right (bit 3) should be removed. 0b1111 -> 0b0111
+        assert_eq!(castling, 0b0111);
+    }
+
+    #[test]
+    fn test_move_black_queenside_rook_removes_castling_right() {
+        let mut board = setup_board();
+        let from = 56; // a8
+        let to = 57;   // b8
+        board.black_rook = 1u64 << from;
+        let mut castling = 0b1111; // All rights available
+
+        board.move_rook(from, to, false, &mut castling);
+
+        // Black queen-side right (bit 0) should be removed. 0b1111 -> 0b1110
+        assert_eq!(castling, 0b1110);
+    }
+
+    #[test]
+    fn test_move_black_kingside_rook_removes_castling_right() {
+        let mut board = setup_board();
+        let from = 63; // h8
+        let to = 62;   // g8
+        board.black_rook = 1u64 << from;
+        let mut castling = 0b1111; // All rights available
+
+        board.move_rook(from, to, false, &mut castling);
+
+        // Black king-side right (bit 1) should be removed. 0b1111 -> 0b1101
+        assert_eq!(castling, 0b1101);
+    }
+
+    #[test]
+    fn test_move_non_castling_rook_does_not_affect_rights() {
+        let mut board = setup_board();
+        board.white_rook = 1u64 << 27; // Rook at d4
+        let mut castling = 0b1111;
+
+        board.move_rook(27, 35, true, &mut castling); // d4 to d5
+
+        // Castling rights should be unchanged
+        assert_eq!(castling, 0b1111);
     }
 }

@@ -25,6 +25,10 @@ impl Bitboard {
                 {
                     return false;
                 }
+                self.apply_move(from_mask, to_mask, Piece::King, is_white);
+                self.apply_move(1u64 << 7, 1u64 << 5, Piece::Rook, is_white);
+                *castling &= !(1 << 5);
+                return true;
             } else if from == 4 && to == 2 && ((*castling & (1 << 2)) != 0) {
                 // Castle queen side
                 if (self.white_rook & (1 << 0) == 0)
@@ -34,17 +38,25 @@ impl Bitboard {
                 {
                     return false;
                 }
+                self.apply_move(from_mask, to_mask, Piece::King, is_white);
+                self.apply_move(1u64 << 0, 1u64 << 3, Piece::Rook, is_white);
+                *castling &= !(1 << 4);
+                return true;
             }
         } else if from == 60 && to == 62 && ((*castling & (1 << 1)) != 0) {
-            // Castle king side
+            // Black castle king side
             if (self.black_rook & (1 << 63) == 0)
                 || (self.all_pieces() & (1 << 61) != 0)
                 || (self.all_pieces() & (1 << 62) != 0)
             {
                 return false;
             }
+            self.apply_move(from_mask, to_mask, Piece::King, is_white);
+            self.apply_move(1u64 << 63, 1u64 << 61, Piece::Rook, is_white);
+            *castling &= !(1 << 4);
+            return true;
         } else if from == 60 && to == 58 && ((*castling & (1 << 2)) != 0) {
-            // Castle queen side
+            // Black castle queen side
             if (self.black_rook & (1 << 56) == 0)
                 || (self.all_pieces() & (1 << 57) != 0)
                 || (self.all_pieces() & (1 << 58) != 0)
@@ -52,6 +64,10 @@ impl Bitboard {
             {
                 return false;
             }
+            self.apply_move(from_mask, to_mask, Piece::King, is_white);
+            self.apply_move(1u64 << 56, 1u64 << 59, Piece::Rook, is_white);
+            *castling &= !(1 << 4);
+            return true;
         }
 
         // Essentially, the king can move +/- 1, 7, 8, 9

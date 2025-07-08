@@ -21,14 +21,19 @@ pub enum GameState {
 impl Default for Game {
     fn default() -> Self {
         // for castling :
-        // 1U << 0 : black castling on queen side
-        // 1U << 1 : black castling on king side
-        // 1U << 2 : white castling on queen side
-        // 1U << 3 : white castling on king side
+        // 1U << 0 : black castling on queen side available 
+        // 1U << 1 : black castling on king side available 
+        // 1U << 2 : white castling on queen side available 
+        // 1U << 3 : white castling on king side available 
+        // 1U << 4 : black has not castled 
+        // 1U << 5 : white has not castled
+        // 1U << 6 : black not in check
+        // 1U << 7 : white not in check
+
         Self {
             board: Bitboard::new(),
             is_white_turn: true,
-            castling: 0b1111,
+            castling: 0b11111111,
             en_passent: None,
         }
     }
@@ -61,7 +66,7 @@ impl Game {
         } else if (self.board.white_bishop | self.board.black_bishop) & from_mask != 0 {
             self.board.move_bishop(from, to, self.is_white_turn)
         } else if (self.board.white_rook | self.board.black_rook) & from_mask != 0 {
-            self.board.move_rook(from, to, self.is_white_turn)
+            self.board.move_rook(from, to, self.is_white_turn, &mut self.castling)
         } else if (self.board.white_queen | self.board.black_queen) & from_mask != 0 {
             self.board.move_queen(from, to, self.is_white_turn)
         } else if (self.board.white_king | self.board.black_king) & from_mask != 0 {
@@ -91,7 +96,6 @@ impl Game {
             return false;
         }
 
-
         true
     }
 
@@ -104,6 +108,43 @@ impl Game {
 
         let king_pos = king_board.trailing_zeros() as usize;
         self.board.possible_check(king_pos, !self.is_white_turn)
+    }
+
+    fn castling_check(&mut self) {
+        if self.castling & (1 << 4) != 0 {
+            println!("he");
+            let mut temp_game = self.clone();
+            temp_game.is_white_turn = false;
+            if temp_game.make_move(60, 59) && temp_game.make_move(60, 58) {
+                self.castling |= 1 << 0;
+            }
+
+            let mut temp_game = self.clone();
+            temp_game.is_white_turn = false;
+            if temp_game.make_move(60, 61) && temp_game.make_move(60, 62) {
+                self.castling |= 1 << 1;
+            }
+
+        } else {
+            println!("eh");
+            self.castling &= !(1 << 0);
+            self.castling &= !(1 << 1);
+        }
+        if self.castling & (1 << 5) != 0 {
+            let mut temp_game = self.clone();
+            temp_game.is_white_turn = true;
+            if temp_game.make_move(4, 2) && temp_game.make_move(4, 3) {
+                self.castling |= 1 << 2;
+            }
+            let mut temp_game = self.clone();
+            temp_game.is_white_turn = true;
+            if temp_game.make_move(4, 5) && temp_game.make_move(4, 6) {
+                self.castling |= 1 << 3;
+            }
+        } else {
+            self.castling &= !(1 << 2);
+            self.castling &= !(1 << 3);
+        }
     }
 
     fn generate_legal_moves(&self) -> Vec<(usize, usize)> {
@@ -133,17 +174,21 @@ impl Game {
         moves
     }
 
-    pub fn game_state(&self) -> GameState {
+    pub fn game_state(&mut self) -> GameState {
         let is_in_check = self.is_in_check();
         let has_legal_moves = !self.generate_legal_moves().is_empty();
+        self.castling_check();
+        println!("{:#010b}", self.castling);
 
         if is_in_check {
             if has_legal_moves {
+                if self.is_white_turn {self.castling &= !(1 << 6)} else {self.castling &= !(1 << 7)};
                 GameState::Check
             } else {
                 GameState::Checkmate
             }
         } else if has_legal_moves {
+                if self.is_white_turn {self.castling |= 1 << 6} else {self.castling |= 1<< 7}
             GameState::Normal
         } else {
             GameState::Stalemate

@@ -1,7 +1,7 @@
 use crate::bitboard::{Bitboard, Piece};
 
 impl Bitboard {
-    pub fn move_rook(&mut self, from: usize, to: usize, is_white: bool) -> bool {
+    pub fn move_rook(&mut self, from: usize, to: usize, is_white: bool, castling: &mut u8) -> bool {
         let from_mask = 1u64 << from;
         let to_mask = 1u64 << to;
 
@@ -55,6 +55,14 @@ impl Bitboard {
 
         } else {
             return false;
+        }
+
+        match from {
+            0 => *castling &= !(1 << 2),
+            7 => *castling &= !(1 << 3),
+            56 => *castling &= !(1 << 0),
+            63 => *castling &= !(1 << 1),
+            _ => (),
         }
 
         if (opponent_pieces & to_mask) == 0 {
