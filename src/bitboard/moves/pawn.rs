@@ -144,15 +144,19 @@ impl Bitboard {
     ) -> bool {
         match promo {
             Some(Piece::Queen) => {
+                self.clear_piece(to_mask, !is_white);
                 self.apply_move(from_mask, to_mask, Piece::Queen, is_white);
             }
             Some(Piece::Rook) => {
+                self.clear_piece(to_mask, !is_white);
                 self.apply_move(from_mask, to_mask, Piece::Rook, is_white);
             }
             Some(Piece::Bishop) => {
+                self.clear_piece(to_mask, !is_white);
                 self.apply_move(from_mask, to_mask, Piece::Bishop, is_white);
             }
             Some(Piece::Knight) => {
+                self.clear_piece(to_mask, !is_white);
                 self.apply_move(from_mask, to_mask, Piece::Knight, is_white);
             }
             None => return false,

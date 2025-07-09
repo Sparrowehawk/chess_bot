@@ -16,7 +16,7 @@ pub struct Bitboard {
     pub black_knight: u64,
     pub black_pawns: u64,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Piece {
     King,
     Queen,
@@ -136,7 +136,6 @@ impl Bitboard {
                 if (all_pieces & target_mask) != 0 {
                     if i < 4 {
                         if (rook_queen & target_mask) != 0 {
-                            println!("{n}");
                             return true;
                         }
                     } else if (bishop_queen & target_mask) != 0 {

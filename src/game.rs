@@ -96,6 +96,8 @@ impl Game {
             return false;
         }
 
+        self.is_white_turn = !self.is_white_turn;
+
         let king_board = if self.is_white_turn {
             self.board.white_king
         } else {
@@ -108,6 +110,7 @@ impl Game {
             self.board = original_board;
             self.castling = original_castling;
             self.en_passent = original_en_passent;
+            self.is_white_turn = !self.is_white_turn;
             return false;
         }
 
@@ -159,7 +162,7 @@ impl Game {
         }
     }
 
-    fn generate_legal_moves(&self) -> Vec<(usize, usize)> {
+    pub fn generate_legal_moves(&self) -> Vec<(usize, usize, Option<Piece>)> {
         let mut moves = Vec::new();
 
         let all_pieces = if self.is_white_turn {
@@ -175,14 +178,41 @@ impl Game {
                         continue;
                     }
 
-                    let mut temp_game = self.clone();
-                    if temp_game.make_move(from, to, None) {
-                        moves.push((from, to));
+                    let if_pawn = if self.is_white_turn {
+                        (self.board.white_pawns & (1u64 << from)) != 0
+                    } else {
+                        (self.board.black_pawns & (1u64 << from)) != 0
+                    };
+
+                    if if_pawn {
+                        let promo_check = if self.is_white_turn {
+                            from / 8 == 6 && to / 8 == 7
+                        } else {
+                            from / 8 == 1 && to / 8 == 0
+                        };
+
+                        if promo_check {
+                            for promo in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
+                                let mut temp_game = self.clone();
+                                if temp_game.make_move(from, to, Some(promo)) {
+                                    moves.push((from, to, Some(promo)));
+                                }
+                            }
+                        } else {
+                            let mut temp_game = self.clone();
+                            if temp_game.make_move(from, to, None) {
+                                moves.push((from, to, None));
+                            }
+                        }
+                    } else {
+                        let mut temp_game = self.clone();
+                        if temp_game.make_move(from, to, None) {
+                            moves.push((from, to, None));
+                        }
                     }
                 }
             }
         }
-
         moves
     }
 
@@ -268,7 +298,6 @@ impl Game {
             match parse_move(trimmed_input) {
                 Some((from, to, promo)) => {
                     if self.make_move(from, to, promo) {
-                        self.is_white_turn = !self.is_white_turn;
                         let position_hash = self.hash_position();
 
                         let count = self.position_history.entry(position_hash).or_insert(0);

@@ -1,4 +1,4 @@
-use chess_bot::bitboard::Bitboard;
+use chess_bot::{bitboard::Bitboard, Game};
 
 fn setup_board(knight_pos: usize, opponent_pos: Option<usize>, friendly_pos: Option<usize>) -> Bitboard {
     let mut board = Bitboard {
@@ -19,6 +19,22 @@ fn setup_board(knight_pos: usize, opponent_pos: Option<usize>, friendly_pos: Opt
 }
 
 // --- VALID MOVES & CAPTURES ---
+
+#[test]
+fn test_knight_moves_from_start() {
+    let game = Game::new();
+    let moves = game.generate_legal_moves();
+    let knight_moves: Vec<_> = moves
+        .iter()
+        .filter(|(from, _, _)| *from == 1 || *from == 6) // b1 or g1
+        .collect();
+
+    for (from, to, _) in &knight_moves {
+        println!("Knight move: {from} -> {to}");
+    }
+
+    assert_eq!(knight_moves.len(), 4); // b1→a3/c3, g1→f3/h3
+}
 
 #[test]
 fn test_knight_valid_moves_all_directions() {
