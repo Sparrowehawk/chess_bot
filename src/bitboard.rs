@@ -1,6 +1,7 @@
 pub mod display;
 pub mod moves;
 
+
 #[derive(Clone)] // Mainly used in tests
 pub struct Bitboard {
     pub white_king: u64,
@@ -161,6 +162,7 @@ impl Bitboard {
         }
         false
     }
+
 }
 
 impl Default for Bitboard {

@@ -9,7 +9,7 @@ use std::{
 use crate::parser::parse_move;
 #[derive(Clone)]
 pub struct Game {
-    board: Bitboard,
+    pub board: Bitboard,
     pub is_white_turn: bool,
     pub castling: u8, // This will be represented with a 4 digit binary
     pub en_passent: Option<usize>,
@@ -96,8 +96,6 @@ impl Game {
             return false;
         }
 
-        self.is_white_turn = !self.is_white_turn;
-
         let king_board = if self.is_white_turn {
             self.board.white_king
         } else {
@@ -110,10 +108,10 @@ impl Game {
             self.board = original_board;
             self.castling = original_castling;
             self.en_passent = original_en_passent;
-            self.is_white_turn = !self.is_white_turn;
             return false;
         }
 
+        self.is_white_turn = !self.is_white_turn;
         true
     }
 
@@ -163,57 +161,17 @@ impl Game {
     }
 
     pub fn generate_legal_moves(&self) -> Vec<(usize, usize, Option<Piece>)> {
-        let mut moves = Vec::new();
+        let mut legal_moves = Vec::new();
 
-        let all_pieces = if self.is_white_turn {
-            self.board.white_pieces()
-        } else {
-            self.board.black_pieces()
-        };
+        let pseudo_legal_moves = self.generate_pseudo_legal_moves();
 
-        for from in 0..64 {
-            if (all_pieces & (1u64 << from)) != 0 {
-                for to in 0..64 {
-                    if from == to {
-                        continue;
-                    }
-
-                    let if_pawn = if self.is_white_turn {
-                        (self.board.white_pawns & (1u64 << from)) != 0
-                    } else {
-                        (self.board.black_pawns & (1u64 << from)) != 0
-                    };
-
-                    if if_pawn {
-                        let promo_check = if self.is_white_turn {
-                            from / 8 == 6 && to / 8 == 7
-                        } else {
-                            from / 8 == 1 && to / 8 == 0
-                        };
-
-                        if promo_check {
-                            for promo in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
-                                let mut temp_game = self.clone();
-                                if temp_game.make_move(from, to, Some(promo)) {
-                                    moves.push((from, to, Some(promo)));
-                                }
-                            }
-                        } else {
-                            let mut temp_game = self.clone();
-                            if temp_game.make_move(from, to, None) {
-                                moves.push((from, to, None));
-                            }
-                        }
-                    } else {
-                        let mut temp_game = self.clone();
-                        if temp_game.make_move(from, to, None) {
-                            moves.push((from, to, None));
-                        }
-                    }
-                }
+        for &(from, to, promo) in &pseudo_legal_moves {
+            let mut temp_game = self.clone();
+            if temp_game.make_move(from, to, promo){
+                legal_moves.push((from, to, promo));
             }
         }
-        moves
+        legal_moves
     }
 
     pub fn game_state(&mut self) -> GameState {
