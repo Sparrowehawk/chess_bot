@@ -13,7 +13,7 @@ pub struct Game {
     pub is_white_turn: bool,
     pub castling: u8, // This will be represented with a 4 digit binary
     pub en_passent: Option<usize>,
-    position_history: HashMap<u64, u32>, // Essentially, en_passent moves are pushed onto the vec and popped off after 1 turn
+    pub position_history: HashMap<u64, u32>, // Essentially, en_passent moves are pushed onto the vec and popped off after 1 turn
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

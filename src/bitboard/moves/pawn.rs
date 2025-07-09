@@ -23,18 +23,19 @@ impl Bitboard {
             return false;
         }
 
-        // println!("{en_passent_target:?}");
-        if Some(to) == en_passent_target && self.is_pawn_capture(from, to, is_white) {
-            self.apply_move(from_mask, to_mask, Piece::Pawn, is_white);
-            let caputed_pawn_pos = if is_white { to - 8 } else { to + 8 };
-            self.clear_piece(1u64 << caputed_pawn_pos, !is_white);
-            return true;
-        }
-
         if self.is_pawn_capture(from, to, is_white) {
-            self.pawn_capture(from, to, opponent_pieces, is_white, promo)
+
+            // println!("{en_passent_target:?}");
+            if Some(to) == en_passent_target && self.is_pawn_capture(from, to, is_white) {
+                self.apply_move(from_mask, to_mask, Piece::Pawn, is_white);
+                let caputed_pawn_pos = if is_white { to - 8 } else { to + 8 };
+                self.clear_piece(1u64 << caputed_pawn_pos, !is_white);
+                return true;
+            } else {
+                return self.pawn_capture(from, to, opponent_pieces, is_white, promo)                
+            }
         } else {
-            self.pawn_push(from, to, is_white, promo, en_passent_next)
+            return self.pawn_push(from, to, is_white, promo, en_passent_next)
         }
     }
 

@@ -1,3 +1,5 @@
+use crate::const_moves::{FILE_A, FILE_H};
+
 pub mod display;
 pub mod moves;
 
@@ -30,6 +32,13 @@ pub enum Piece {
 impl Bitboard {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn empty() -> Self {
+        Bitboard {
+            white_king: 0, white_queen: 0, white_rook: 0, white_bishop: 0, white_knight: 0, white_pawns: 0,
+            black_king: 0, black_queen: 0, black_rook: 0, black_bishop: 0, black_knight: 0, black_pawns: 0,
+        }
     }
 
     pub fn white_pieces(&self) -> u64 {
@@ -84,34 +93,15 @@ impl Bitboard {
         };
 
 
-        let pawn_attacks = if attacked_is_white { [7, 9] } else { [-7, -9] };
-        for attacks in pawn_attacks {
-            let from_square = (position as isize) + attacks;
-            if (0..64).contains(&from_square)
-                && (opponent_pawn & (1u64 << from_square)) != 0 {
-                    // Wrap around check
-                    let from_file = (from_square as usize) % 8;
-                    let to_file = position % 8;
-                    if (from_file as i8 - to_file as i8).abs() == 1 {
-                        return true;
-                    }
-                }
-        }
+        let pawn_attack_dir = if attacked_is_white { -1 } else { 1 };
+        let pawn_attacks = ((1u64 << (position as i8 + 7 * pawn_attack_dir).max(0)) & !FILE_H) | 
+                           ((1u64 << (position as i8 + 9 * pawn_attack_dir).max(0)) & !FILE_A);
+        if (pawn_attacks & opponent_pawn) != 0 { return true; }
+    
 
 
-        let knight_attacks = [-17, -15, -10, -6, 6, 10, 15, 17];
-        for attacks in knight_attacks {
-            let from_square = (position as isize) + attacks;
-            if (0..64).contains(&from_square)
-                && (opponent_knight & (1u64 << from_square)) != 0 {
-                    // Wrap around check
-                    let from_file = (from_square as usize) % 8;
-                    let to_file = position % 8;
-                    if (from_file as i8 - to_file as i8).abs() == 1 {
-                        return true;
-                    }
-                }
-        }
+        if (self.get_knight_attacks(position) & opponent_knight) != 0 { return true; }
+        if (self.get_king_attacks(position) & opponent_king) != 0 { return true; }
 
 
         // Sliding attack
@@ -119,47 +109,13 @@ impl Bitboard {
         let bishop_queen = opponent_bishop | opponent_queen;
         let rook_queen = opponent_rook | opponent_queen;
 
-        let directions = [-8, 8, 1, -1, -7, -9, 7, 9];
-        for (i, &dir) in directions.iter().enumerate() {
-            for n in 1..8 {
-                let target = (position as isize) +dir * n;
-                if !(0..64).contains(&target) {
-                    break;
-                }
-
-                let from_file = ((target - dir) as usize) % 8;
-                let to_file = ((target - dir) as usize) % 8;
-                if (from_file as i8 - to_file as i8).abs() > 1 {
-                    break;
-                }
-
-                let target_mask = 1u64 << target;
-                if (all_pieces & target_mask) != 0 {
-                    if i < 4 {
-                        if (rook_queen & target_mask) != 0 {
-                            return true;
-                        }
-                    } else if (bishop_queen & target_mask) != 0 {
-                        return true;
-                    }
-                    break;
-                }
-            }
-        }
+        let bishop_attacks = self.get_bishop_attacks(position, all_pieces);
+        if (bishop_attacks & bishop_queen) != 0 { return true; }
+        
+        let rook_attacks = self.get_rook_attacks(position, all_pieces);
+        if (rook_attacks & rook_queen) != 0 { return true; }
 
 
-        // King moves
-        for offset in directions {
-            let from_square = { position as isize } + offset;
-            if from_square > 0 && from_square < 64
-                && (opponent_king & (1u64 << from_square)) != 0 {
-                    let from_file = (from_square as usize) % 8;
-                    let to_file = position % 8;
-                    if (from_file as i8 - to_file as i8).abs() <= 1 {
-                        return true;
-                    }
-                }
-        }
         false
     }
 

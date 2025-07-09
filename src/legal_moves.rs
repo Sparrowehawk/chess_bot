@@ -71,19 +71,33 @@ impl Game {
             pawns &= pawns - 1;
         }
 
-        if let Some(en_passent_target) = self.en_passent {
-            let attacking_squares = if self.is_white_turn {
-                ((1u64 << (en_passent_target - 7)) * ((en_passent_target % 8 != 0) as u64))
-                    | ((1u64 << (en_passent_target - 9)) * ((en_passent_target % 8 != 7) as u64))
-            } else {
-                ((1u64 << (en_passent_target + 7)) * ((en_passent_target % 8 != 0) as u64))
-                    | ((1u64 << (en_passent_target + 9)) * ((en_passent_target % 8 != 7) as u64))
-            };
+        // Re comment
+        if let Some(ep_square) = self.en_passent {
+            // ep_square is the destination of the capture (e.g., h3)
 
-            let attackers = my_pawns & attacking_squares;
-            if attackers != 0 {
-                let from = attackers.trailing_zeros() as usize;
-                moves.push((from, en_passent_target, None));
+            let ep_rank = ep_square / 8;
+            
+            // Determine which rank the attacking pawn MUST be on.
+            // If White is capturing, the target square is on rank 6, so the White pawn must be on rank 5.
+            // If Black is capturing, the target square is on rank 3, so the Black pawn must be on rank 4.
+            let required_rank = if self.is_white_turn { 4 } else { 3 };
+            
+            // The file of the pawn that would be captured (e.g., the 'h' file for h2h4)
+            let ep_file = ep_square % 8;
+
+            // Check for an attacker on the West side of the captured pawn
+            if ep_file > 0 {
+                let attacker_pos = if self.is_white_turn { ep_square - 9 } else { ep_square + 7 };
+                if (attacker_pos / 8 == required_rank) && ((my_pawns & (1u64 << attacker_pos)) != 0) {
+                    moves.push((attacker_pos, ep_square, None));
+                }
+            }
+            // Check for an attacker on the East side of the captured pawn
+            if ep_file < 7 {
+                let attacker_pos = if self.is_white_turn { ep_square - 7 } else { ep_square + 9 };
+                 if (attacker_pos / 8 == required_rank) && ((my_pawns & (1u64 << attacker_pos)) != 0) {
+                    moves.push((attacker_pos, ep_square, None));
+                }
             }
         }
     }
