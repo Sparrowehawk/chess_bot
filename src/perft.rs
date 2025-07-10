@@ -20,7 +20,7 @@ impl Game {
         nodes
     }
 
-    pub fn perft_divide(&mut self, depth: u32) {
+    pub fn  perft_divide(&mut self, depth: u32) {
         if depth == 0 {
             println!("Total nodes at depth {depth} : 0");
             return;

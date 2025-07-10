@@ -1,5 +1,3 @@
-use crate::const_moves::{FILE_A, FILE_H};
-
 pub mod display;
 pub mod moves;
 
@@ -63,7 +61,7 @@ impl Bitboard {
         self.white_pieces() | self.black_pieces()
     }
 
-    pub fn possible_check(&self, position: usize, attacked_is_white: bool) -> bool {
+    pub fn possible_check(&self, position: usize, attacker_is_white: bool) -> bool {
         let (
             opponent_pawn,
             opponent_knight,
@@ -71,7 +69,7 @@ impl Bitboard {
             opponent_rook,
             opponent_queen,
             opponent_king,
-        ) = if attacked_is_white {
+        ) = if attacker_is_white {
             (
                 self.white_pawns,
                 self.white_knight,
@@ -92,14 +90,20 @@ impl Bitboard {
             )
         };
 
+        let mut pawn_attacks: u64 = 0;
+        if !attacker_is_white { // Attacker is Black, target is White
+            if (position % 8 != 0) && position >= 9 { pawn_attacks |= 1u64 << (position - 9); }
+            if (position % 8 != 7) && position >= 7 { pawn_attacks |= 1u64 << (position - 7); }
+        } else { // Attacker is White, target is Black
+            if (position % 8 != 0) && position < 56 { pawn_attacks |= 1u64 << (position + 7); }
+            if (position % 8 != 7) && position < 56 { pawn_attacks |= 1u64 << (position + 9); }
+        }
 
-        let pawn_attack_dir = if attacked_is_white { -1 } else { 1 };
-        let pawn_attacks = ((1u64 << (position as i8 + 7 * pawn_attack_dir).max(0)) & !FILE_H) | 
-                           ((1u64 << (position as i8 + 9 * pawn_attack_dir).max(0)) & !FILE_A);
-        if (pawn_attacks & opponent_pawn) != 0 { return true; }
-    
+        if pawn_attacks & opponent_pawn != 0 {
+            return  true;
+        }
 
-
+            
         if (self.get_knight_attacks(position) & opponent_knight) != 0 { return true; }
         if (self.get_king_attacks(position) & opponent_king) != 0 { return true; }
 
@@ -109,11 +113,10 @@ impl Bitboard {
         let bishop_queen = opponent_bishop | opponent_queen;
         let rook_queen = opponent_rook | opponent_queen;
 
-        let bishop_attacks = self.get_bishop_attacks(position, all_pieces);
-        if (bishop_attacks & bishop_queen) != 0 { return true; }
-        
-        let rook_attacks = self.get_rook_attacks(position, all_pieces);
-        if (rook_attacks & rook_queen) != 0 { return true; }
+
+        if (Self::get_bishop_attacks(position, all_pieces) & bishop_queen) != 0 { return true; }
+        if (Self::get_rook_attacks(position, all_pieces) & rook_queen) != 0 { return true; }
+
 
 
         false

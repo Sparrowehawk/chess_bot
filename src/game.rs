@@ -163,7 +163,7 @@ impl Game {
     pub fn generate_legal_moves(&self) -> Vec<(usize, usize, Option<Piece>)> {
         let mut legal_moves = Vec::new();
 
-        let pseudo_legal_moves = self.generate_pseudo_legal_moves();
+        let pseudo_legal_moves = self.generate_pseudo_legal_move();
 
         for &(from, to, promo) in &pseudo_legal_moves {
             let mut temp_game = self.clone();

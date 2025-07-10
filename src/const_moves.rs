@@ -1,4 +1,6 @@
 use crate::Bitboard;
+pub mod rook_magics;
+pub mod bishop_magics;
 
 const KNIGHT_ATTACKS: [u64; 64] = precalculate_knight_attacks();
 const KING_ATTACKS: [u64; 64] = precalculate_king_attacks();
@@ -95,45 +97,19 @@ impl Bitboard {
         KING_ATTACKS[from]
     }
 
-    pub fn get_bishop_attacks(&self, from: usize, all_pieces: u64) -> u64 {
-        let mut attacks = 0u64;
-        let directions = [-9, -7, 7, 9];
-        for &dir in &directions {
-            let mut pos = from as i8;
-            loop {
-                let at_h_file = pos % 8 == 7;
-                let at_a_file = pos % 8 == 0;
-                if (at_h_file && (dir == -7 || dir == 9)) || (at_a_file && (dir == -9 || dir == 7)) { break; }
-    
-                pos += dir;
-                if !(0..=63).contains(&pos) { break; }
-                
-                let pos_mask = 1u64 << pos;
-                attacks |= pos_mask;
-                if (all_pieces & pos_mask) != 0 { break; }
-            }
-        }
-        attacks
+    pub fn get_bishop_attacks(square: usize, all_pieces: u64) -> u64 {
+        let blockers = all_pieces & bishop_magics::BISHOP_MASKS[square];
+        let magic_index = (blockers.wrapping_mul(bishop_magics::BISHOP_MAGICS[square]) >> bishop_magics::BISHOP_SHIFTS[square]) as usize;
+        let offset = bishop_magics::BISHOP_OFFSETS[square];
+        bishop_magics::BISHOP_ATTACKS[offset + magic_index]
     }
+    
 
-    pub fn get_rook_attacks(&self, from: usize, all_pieces: u64) -> u64 {
-        let mut attacks = 0u64;
-        let directions = [-8, -1, 1, 8];
-        for &dir in &directions {
-            let mut pos = from as i8;
-            loop {
-                let at_h_file = pos % 8 == 7;
-                let at_a_file = pos % 8 == 0;
-                if (at_h_file && dir == 1) || (at_a_file && dir == -1) { break; }
-                
-                pos += dir;
-                if !(0..=63).contains(&pos) { break; }
-    
-                let pos_mask = 1u64 << pos;
-                attacks |= pos_mask;
-                if (all_pieces & pos_mask) != 0 { break; }
-            }
-        }
-        attacks
+    pub fn get_rook_attacks(square: usize, all_pieces: u64) -> u64 {
+        let blockers = all_pieces & rook_magics::ROOK_MASKS[square];
+        let magic_index = (blockers.wrapping_mul(rook_magics::ROOK_MAGIC[square]) >> rook_magics::ROOK_SHIFTS[square]) as usize;    
+        let offset = rook_magics::ROOK_OFFSETS[square];
+        rook_magics::ROOK_ATTACKS[offset + magic_index]
     }
+    
 }

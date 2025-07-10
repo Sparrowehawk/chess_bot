@@ -32,7 +32,7 @@ impl Game {
             } else {
                 if file > 7 { return Err("Invalid FEN: file out of bounds"); }
                 let square_index = (rank * 8 + file) as usize;
-                let piece = match ch {
+                let _piece = match ch {
                     'P' => { board.white_pawns |= 1 << square_index; }
                     'N' => { board.white_knight |= 1 << square_index; }
                     'B' => { board.white_bishop |= 1 << square_index; }

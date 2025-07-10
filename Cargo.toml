@@ -2,6 +2,8 @@
 name = "chess_bot"
 version = "0.1.0"
 edition = "2024"
+default-run = "chess_bot"
 
 [dependencies]
 chess = "3.2.0"
+rand = "0.9.1"

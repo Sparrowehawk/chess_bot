@@ -5,6 +5,7 @@ pub mod bishop;
 pub mod knight;
 pub mod pawn;
 
+
 use crate::bitboard::{Bitboard, Piece};
 
 impl Bitboard {
