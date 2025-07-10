@@ -3,8 +3,16 @@ use crate::game::Game;
 use crate::Bitboard;
 
 impl Game {
-
-    // --- Pawn, Knight, and King move generation are already optimal and remain unchanged ---
+    pub fn generate_pseudo_legal_moves(&self) -> Vec<(usize, usize, Option<Piece>)> {
+        let mut moves = Vec::new();
+        self.generate_pawn_moves(&mut moves);
+        self.generate_knight_moves(&mut moves);
+        self.generate_bishop_moves(&mut moves);
+        self.generate_rook_moves(&mut moves);
+        self.generate_queen_moves(&mut moves);
+        self.generate_king_moves(&mut moves);
+        moves
+    }
 
     fn generate_pawn_moves(&self, moves: &mut Vec<(usize, usize, Option<Piece>)>) {
         let (my_pawns, enemy_pieces, rank_7, rank_2, push_dir) = if self.is_white_turn {
@@ -95,8 +103,6 @@ impl Game {
         }
     }
 
-    // --- OPTIMIZED: Sliding Piece Move Generation ---
-
     fn generate_bishop_moves(&self, moves: &mut Vec<(usize, usize, Option<Piece>)>) {
         let (my_bishops, my_pieces) = if self.is_white_turn {
             (self.board.white_bishop, self.board.white_pieces())
@@ -107,14 +113,14 @@ impl Game {
         let mut bishops = my_bishops;
         while bishops != 0 {
             let from = bishops.trailing_zeros() as usize;
-            let mut attacks =
-                Bitboard::get_bishop_attacks(from, self.board.all_pieces() & !my_bishops);
-            attacks &= !my_pieces;
+            let attacks = Bitboard::get_bishop_attacks(from, self.board.all_pieces());
+            let attacks = attacks & !my_pieces;
 
-            while attacks != 0 {
-                let to = attacks.trailing_zeros() as usize;
+            let mut targets = attacks;
+            while targets != 0 {
+                let to = targets.trailing_zeros() as usize;
                 moves.push((from, to, None));
-                attacks &= attacks - 1;
+                targets &= targets - 1;
             }
             bishops &= bishops - 1;
         }
@@ -130,14 +136,14 @@ impl Game {
         let mut rooks = my_rooks;
         while rooks != 0 {
             let from = rooks.trailing_zeros() as usize;
-            let mut attacks =
-                Bitboard::get_rook_attacks(from, self.board.all_pieces() & !my_rooks);
-            attacks &= !my_pieces;
+            let attacks = Bitboard::get_rook_attacks(from, self.board.all_pieces());
+            let attacks = attacks & !my_pieces;
 
-            while attacks != 0 {
-                let to = attacks.trailing_zeros() as usize;
+            let mut targets = attacks;
+            while targets != 0 {
+                let to = targets.trailing_zeros() as usize;
                 moves.push((from, to, None));
-                attacks &= attacks - 1;
+                targets &= targets - 1;
             }
             rooks &= rooks - 1;
         }
@@ -153,17 +159,14 @@ impl Game {
         let mut queens = my_queens;
         while queens != 0 {
             let from = queens.trailing_zeros() as usize;
-            let blockers = self.board.all_pieces() & !my_queens;
+            let blockers = self.board.all_pieces();
+            let attacks = (Bitboard::get_rook_attacks(from, blockers) | Bitboard::get_bishop_attacks(from, blockers)) & !my_pieces;
 
-            // A queen's move is the union of a rook's and bishop's moves from the same square.
-            let mut attacks = Bitboard::get_rook_attacks(from, blockers)
-                | Bitboard::get_bishop_attacks(from, blockers);
-            attacks &= !my_pieces;
-
-            while attacks != 0 {
-                let to = attacks.trailing_zeros() as usize;
+            let mut targets = attacks;
+            while targets != 0 {
+                let to = targets.trailing_zeros() as usize;
                 moves.push((from, to, None));
-                attacks &= attacks - 1;
+                targets &= targets - 1;
             }
             queens &= queens - 1;
         }
