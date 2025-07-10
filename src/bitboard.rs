@@ -93,10 +93,23 @@ impl Bitboard {
         };
 
 
-        let pawn_attack_dir = if attacked_is_white { -1 } else { 1 };
-        let pawn_attacks = ((1u64 << (position as i8 + 7 * pawn_attack_dir).max(0)) & !FILE_H) | 
-                           ((1u64 << (position as i8 + 9 * pawn_attack_dir).max(0)) & !FILE_A);
-        if (pawn_attacks & opponent_pawn) != 0 { return true; }
+        let dir = if attacked_is_white { -1 } else { 1 };
+        let pos = position as i8;
+
+        let left_attack = pos + 7 * dir;
+        let right_attack = pos + 9 * dir;
+
+        let mut pawn_attacks = 0u64;
+        if (0..64).contains(&left_attack) && (pos % 8 != 0) {
+            pawn_attacks |= 1u64 << left_attack;
+        }
+        if (0..64).contains(&right_attack) && (pos % 8 != 7) {
+            pawn_attacks |= 1u64 << right_attack;
+        }
+
+        if (pawn_attacks & opponent_pawn) != 0 {
+            return true;
+        }
     
 
 
