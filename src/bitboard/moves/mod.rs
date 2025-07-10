@@ -1,3 +1,5 @@
+// These files are mainly for data validation more so than anything
+
 pub mod king;
 pub mod queen;
 pub mod rook;
@@ -5,11 +7,11 @@ pub mod bishop;
 pub mod knight;
 pub mod pawn;
 
-
 use crate::bitboard::{Bitboard, Piece};
 
 impl Bitboard {
     fn apply_move(&mut self, from_mask: u64, to_mask: u64, piece: Piece, is_white: bool) {
+        // Everything else required is done via individual piece
         let tmp_board = self.get_mut_board(piece, is_white);
         *tmp_board &= !from_mask;
         *tmp_board |= to_mask;

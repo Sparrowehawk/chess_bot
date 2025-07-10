@@ -35,9 +35,9 @@ fn generate_blocker_permutations(mask: u64) -> Vec<u64> {
     let num_bits = bits.len();
     for i in 0..(1 << num_bits) {
         let mut b = 0;
-        for j in 0..num_bits {
+        for (j, &bit) in bits.iter().enumerate() {
             if (i & (1 << j)) != 0 {
-                b |= 1u64 << bits[j];
+                b |= 1u64 << bit;
             }
         }
         result.push(b);
@@ -45,7 +45,7 @@ fn generate_blocker_permutations(mask: u64) -> Vec<u64> {
     result
 }
 
-/// Correctly calculates bishop attacks for a given blocker set.
+/// Calculates bishop attacks for a given blocker set.
 fn calculate_bishop_attacks(square: usize, blockers: u64) -> u64 {
     let mut attack = 0u64;
     let r_start = (square / 8) as i8;
@@ -79,7 +79,7 @@ fn find_bishop_magic_and_table(square: usize) -> (u64, Vec<u64>, u8) {
         .map(|&blockers| calculate_bishop_attacks(square, blockers))
         .collect();
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     for _ in 0..100_000_000 {
         let magic = rng.random::<u64>() & rng.random::<u64>() & rng.random::<u64>();
@@ -102,7 +102,7 @@ fn find_bishop_magic_and_table(square: usize) -> (u64, Vec<u64>, u8) {
         }
     }
 
-    panic!("Failed to find magic number for square {}", square);
+    panic!("Failed to find magic number for square {square}");
 }
 
 // --- Main Data Generation Logic ---
@@ -117,7 +117,7 @@ struct MagicData {
 pub fn generate_bishop_data() {
     println!("// --- Bishop Magic Bitboard Data (Auto-Generated) ---");
 
-    // 1. Generate and collect all data first
+    // generate and collect all data first
     let all_data: Vec<MagicData> = (0..64)
         .map(|sq| {
             let (magic, table, num_bits) = find_bishop_magic_and_table(sq);
@@ -130,7 +130,7 @@ pub fn generate_bishop_data() {
         })
         .collect();
 
-    // 2. Calculate offsets and flatten the attack tables
+    // calculate offsets and flatten the attack tables
     let mut offsets = [0; 64];
     let mut flat_attacks = Vec::new();
     let mut current_offset = 0;
@@ -142,49 +142,48 @@ pub fn generate_bishop_data() {
         current_offset += table.len();
     }
 
-    // 3. Print all the constants
+    // print all the constants
 
-    // MASKS
     println!("pub const BISHOP_MASKS: [u64; 64] = [");
-    for i in 0..64 {
+    for (i, data) in all_data.iter().enumerate() {
         if i % 4 == 0 { print!("    "); }
-        print!("0x{:016x}, ", all_data[i].mask);
+        print!("0x{:016x}, ", data.mask);
         if (i + 1) % 4 == 0 { println!(); }
     }
     println!("];\n");
 
     // MAGICS
     println!("pub const BISHOP_MAGICS: [u64; 64] = [");
-    for i in 0..64 {
+    for (i, data) in all_data.iter().enumerate() {
         if i % 4 == 0 { print!("    "); }
-        print!("0x{:016x}, ", all_data[i].magic);
+        print!("0x{:016x}, ", data.magic);
         if (i + 1) % 4 == 0 { println!(); }
     }
     println!("];\n");
 
     // SHIFTS
     println!("pub const BISHOP_SHIFTS: [u8; 64] = [");
-    for i in 0..64 {
+    for (i, data) in all_data.iter().enumerate() {
         if i % 8 == 0 { print!("    "); }
-        print!("{}, ", all_data[i].shift);
+        print!("{}, ", data.shift);
         if (i + 1) % 8 == 0 { println!(); }
     }
     println!("];\n");
 
     // OFFSETS
     println!("pub const BISHOP_OFFSETS: [usize; 64] = [");
-    for i in 0..64 {
+    for (i, offset) in offsets.iter().enumerate() {
         if i % 8 == 0 { print!("    "); }
-        print!("{:>4}, ", offsets[i]);
+        print!("{offset:>4}, ");
         if (i + 1) % 8 == 0 { println!(); }
     }
     println!("];\n");
 
-    // The giant flattened ATTACKS table
-    println!("pub const BISHOP_ATTACKS: [u64; {}] = [", flat_attacks.len());
+    // The fat ATTACKS table
+    println!("pub static BISHOP_ATTACKS: [u64; {}] = [", flat_attacks.len());
     for (i, &attack) in flat_attacks.iter().enumerate() {
         if i % 4 == 0 { print!("    "); }
-        print!("0x{:016x}, ", attack);
+        print!("0x{attack:016x}, ");
         if (i + 1) % 4 == 0 { println!(); }
     }
     println!("];");

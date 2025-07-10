@@ -10,6 +10,7 @@ impl Bitboard {
         en_passent_target: Option<usize>,
         en_passent_next: &mut Option<usize>,
     ) -> bool {
+
         let from_mask = 1u64 << from;
         let to_mask = 1u64 << to;
 
@@ -23,19 +24,22 @@ impl Bitboard {
             return false;
         }
 
-        if self.is_pawn_capture(from, to, is_white) {
+        // Checks if the pawn is to capture or en passant
 
-            // println!("{en_passent_target:?}");
+        if self.is_pawn_capture(from, to, is_white) {
+            // En passent check
             if Some(to) == en_passent_target && self.is_pawn_capture(from, to, is_white) {
                 self.apply_move(from_mask, to_mask, Piece::Pawn, is_white);
                 let caputed_pawn_pos = if is_white { to - 8 } else { to + 8 };
                 self.clear_piece(1u64 << caputed_pawn_pos, !is_white);
-                return true;
+                true
             } else {
-                return self.pawn_capture(from, to, opponent_pieces, is_white, promo)                
+                // Regualr capture check
+                self.pawn_capture(from, to, opponent_pieces, is_white, promo)                
             }
         } else {
-            return self.pawn_push(from, to, is_white, promo, en_passent_next)
+            // SHINZO SASAGEYOOOOOOOOOOOOOOOOO
+            self.pawn_push(from, to, is_white, promo, en_passent_next)
         }
     }
 
@@ -47,6 +51,7 @@ impl Bitboard {
         promo: Option<Piece>,
         en_passent_next: &mut Option<usize>,
     ) -> bool {
+
         let from_mask = 1u64 << from;
         let to_mask = 1u64 << to;
         if (self.all_pieces() & to_mask) != 0 {
@@ -58,7 +63,9 @@ impl Bitboard {
         } else {
             to + 8 == from
         };
+
         if single_valid_push {
+            // Promotion check
             if is_white {
                 if to / 8 == 7 {
                     return self.promo_move(from_mask, to_mask, is_white, promo);
@@ -67,7 +74,7 @@ impl Bitboard {
                 return self.promo_move(from_mask, to_mask, is_white, promo);
             }
 
-            if promo.is_some() {
+            if promo.is_some() { // Cannot promo on double move
                 return false;
             }
 
@@ -75,6 +82,7 @@ impl Bitboard {
             return true;
         }
 
+        // Double push check
         let is_on_starting_rank = if is_white {
             from / 8 == 1
         } else {

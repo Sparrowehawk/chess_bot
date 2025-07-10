@@ -2,13 +2,16 @@ use crate::Bitboard;
 pub mod rook_magics;
 pub mod bishop_magics;
 
+// Precaluated knight and king on compile time
+// Sliders are compiled and calculated pre compile into magic bitmaps
+
 const KNIGHT_ATTACKS: [u64; 64] = precalculate_knight_attacks();
 const KING_ATTACKS: [u64; 64] = precalculate_king_attacks();
 
-pub const FILE_A: u64 = 0x0101010101010101;
+const FILE_A: u64 = 0x0101010101010101;
 const FILE_B: u64 = 0x0202020202020202;
 const FILE_G: u64 = 0x4040404040404040;
-pub const FILE_H: u64 = 0x8080808080808080;
+const FILE_H: u64 = 0x8080808080808080;
 
 const fn precalculate_knight_attacks() -> [u64; 64] {
     let mut attacks = [0u64; 64];

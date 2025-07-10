@@ -1,6 +1,7 @@
 use crate::bitboard::Bitboard;
 
 impl Bitboard{
+    // For us to see
     pub fn print_board(&self) {
         for rank in (0..8).rev() {
             for file in 0..8 {
@@ -12,6 +13,7 @@ impl Bitboard{
         }
         println!("\na b c d e f g h");
     }
+
     fn piece_symbol(&self ,index: u64) -> char {
         let mask = 1u64 << index;
         match () {

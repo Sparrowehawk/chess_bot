@@ -2,6 +2,8 @@ use crate::bitboard::{Bitboard, Piece};
 
 impl Bitboard {
     pub fn move_queen(&mut self, from: usize, to: usize, is_white: bool) -> bool {
+        // Queen is bassically a rook and a bishop combined
+
         let from_mask = 1u64 << from;
         let to_mask = 1u64 << to;
 

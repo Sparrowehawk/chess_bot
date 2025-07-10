@@ -19,7 +19,7 @@ impl Game {
             return Err("Invalid FEN string: not enough parts.");
         }
 
-        // 1. Piece Placement
+        // Pieces on le board
         let piece_placement = parts[0];
         let mut rank = 7;
         let mut file = 0;
@@ -32,7 +32,7 @@ impl Game {
             } else {
                 if file > 7 { return Err("Invalid FEN: file out of bounds"); }
                 let square_index = (rank * 8 + file) as usize;
-                let _piece = match ch {
+                match ch {
                     'P' => { board.white_pawns |= 1 << square_index; }
                     'N' => { board.white_knight |= 1 << square_index; }
                     'B' => { board.white_bishop |= 1 << square_index; }
@@ -51,14 +51,14 @@ impl Game {
             }
         }
 
-        // 2. Active Color
+        // Colour time
         let is_white_turn = match parts[1] {
             "w" => true,
             "b" => false,
-            _ => return Err("Invalid active color in FEN."),
+            _ => return Err("Invalid active colour in FEN."),
         };
 
-        // 3. Castling Availability
+        // Parse castling rights
         let mut castling = 0u8;
         let castling_rights = parts[2];
         if castling_rights.contains('K') { castling |= 1 << 3; }
@@ -66,18 +66,18 @@ impl Game {
         if castling_rights.contains('k') { castling |= 1 << 1; }
         if castling_rights.contains('q') { castling |= 1 << 0; }
 
-        // 4. En Passant Target Square
-        let en_passant_str = parts[3];
-        let en_passent = if en_passant_str == "-" {
+        // if en passent is available
+        let en_passent_str = parts[3];
+        let en_passent = if en_passent_str == "-" {
             None
         } else {
-            let file = en_passant_str.chars().nth(0).ok_or("Invalid en passant square")? as u8 - b'a';
-            let rank = en_passant_str.chars().nth(1).ok_or("Invalid en passant square")? as u8 - b'1';
+            let file = en_passent_str.chars().nth(0).ok_or("Invalid en passant square")? as u8 - b'a';
+            let rank = en_passent_str.chars().nth(1).ok_or("Invalid en passant square")? as u8 - b'1';
             if file > 7 || rank > 7 { return Err("Invalid en passant square"); }
             Some((rank * 8 + file) as usize)
         };
         
-        // 5. & 6. Halfmove and Fullmove clocks (ignored for perft)
+        // Ignore halfmove and full_move clos
 
         Ok(Game {
             board,

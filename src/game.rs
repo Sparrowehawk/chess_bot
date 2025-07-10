@@ -11,7 +11,7 @@ use crate::parser::parse_move;
 pub struct Game {
     pub board: Bitboard,
     pub is_white_turn: bool,
-    pub castling: u8, // This will be represented with a 4 digit binary
+    pub castling: u8, // This will be represented with a 8 digit binary
     pub en_passent: Option<usize>,
     pub position_history: HashMap<u64, u32>, // Essentially, en_passent moves are pushed onto the vec and popped off after 1 turn
 }
@@ -66,6 +66,7 @@ impl Game {
             return false;
         }
 
+        // Test is a move is sucessful or not
         let move_success = if (self.board.white_pawns | self.board.black_pawns) & from_mask != 0 {
             self.board.move_pawn(
                 from,
@@ -104,7 +105,9 @@ impl Game {
 
         let king_pos = king_board.trailing_zeros() as usize;
 
+        // Check if the new move will put the king as check
         if self.board.possible_check(king_pos, !self.is_white_turn) {
+            // Revert if so
             self.board = original_board;
             self.castling = original_castling;
             self.en_passent = original_en_passent;
@@ -115,6 +118,7 @@ impl Game {
         true
     }
 
+    // If the king IS in check (bozo)
     pub fn is_in_check(&self) -> bool {
         let king_board = if self.is_white_turn {
             self.board.white_king
@@ -126,6 +130,7 @@ impl Game {
         self.board.possible_check(king_pos, !self.is_white_turn)
     }
 
+    // Checks for castling rights if it still can
     fn castling_check(&mut self) {
         if self.castling & (1 << 4) != 0 {
             let mut temp_game = self.clone();
@@ -161,6 +166,8 @@ impl Game {
     }
 
     pub fn generate_legal_moves(&self) -> Vec<(usize, usize, Option<Piece>)> {
+        // Takes all moves, checks if the game can process them
+
         let mut legal_moves = Vec::new();
 
         let pseudo_legal_moves = self.generate_pseudo_legal_moves();
@@ -201,6 +208,7 @@ impl Game {
         }
     }
 
+    // Used for 3 fold repitition
     fn hash_position(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.board.all_pieces().hash(&mut hasher);
@@ -211,6 +219,7 @@ impl Game {
         hasher.finish()
     }
 
+    // GAME TIME
     pub fn run(&mut self) {
         loop {
             self.board.print_board();
@@ -241,13 +250,12 @@ impl Game {
             print!("\n{player}> ");
             io::stdout().flush().unwrap(); // Ensure the prompt appears before input
 
-            // 3. Read user input
+            // read user input
             let mut input = String::new();
             io::stdin()
                 .read_line(&mut input)
                 .expect("Failed to read line");
 
-            // 4. Parse the input
             let trimmed_input = input.trim();
             if trimmed_input == "exit" {
                 break;
@@ -256,6 +264,7 @@ impl Game {
             match parse_move(trimmed_input) {
                 Some((from, to, promo)) => {
                     if self.make_move(from, to, promo) {
+                        // If a move is possible, add it to the move history list
                         let position_hash = self.hash_position();
 
                         let count = self.position_history.entry(position_hash).or_insert(0);

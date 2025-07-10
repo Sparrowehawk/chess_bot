@@ -1,5 +1,7 @@
 use crate::bitboard::Piece;
 
+
+// Changes UCI input into bitboard
 pub fn parse_move(input: &str) -> Option<(usize, usize, Option<Piece>)> {
     if input.len() != 4 && input.len() != 5 {
         return None;

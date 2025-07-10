@@ -32,6 +32,7 @@ impl Bitboard {
         Self::default()
     }
 
+    // Useful for setting for testing
     pub fn empty() -> Self {
         Bitboard {
             white_king: 0, white_queen: 0, white_rook: 0, white_bishop: 0, white_knight: 0, white_pawns: 0,
@@ -91,10 +92,11 @@ impl Bitboard {
         };
 
         let mut pawn_attacks: u64 = 0;
-        if !attacker_is_white { // Attacker is Black, target is White
+        // Checks for attacks by pawns
+        if attacker_is_white { 
             if (position % 8 != 0) && position >= 9 { pawn_attacks |= 1u64 << (position - 9); }
             if (position % 8 != 7) && position >= 7 { pawn_attacks |= 1u64 << (position - 7); }
-        } else { // Attacker is White, target is Black
+        } else { 
             if (position % 8 != 0) && position < 56 { pawn_attacks |= 1u64 << (position + 7); }
             if (position % 8 != 7) && position < 56 { pawn_attacks |= 1u64 << (position + 9); }
         }
@@ -109,6 +111,7 @@ impl Bitboard {
 
 
         // Sliding attack
+        // Queen is a combined rook and bishop
         let all_pieces = self.all_pieces();
         let bishop_queen = opponent_bishop | opponent_queen;
         let rook_queen = opponent_rook | opponent_queen;
@@ -124,6 +127,7 @@ impl Bitboard {
 
 }
 
+// Noraml setup for a normal game
 impl Default for Bitboard {
     fn default() -> Self {
         Self {

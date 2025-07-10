@@ -5,13 +5,13 @@ fn rook_blocker_mask(square: usize) -> u64 {
     let r = (square / 8) as i8;
     let f = (square % 8) as i8;
 
-    // Horizontal (excluding file 0 and 7)
+    // horizontal 
     for i in 1..7 {
         if i != f {
             result |= 1u64 << (r * 8 + i);
         }
     }
-    // Vertical (excluding rank 0 and 7)
+    // vertical 
     for i in 1..7 {
         if i != r {
             result |= 1u64 << (i * 8 + f);
@@ -31,9 +31,9 @@ fn generate_blocker_permutations(mask: u64) -> Vec<u64> {
     let num_bits = bits.len();
     for i in 0..(1 << num_bits) {
         let mut b = 0;
-        for j in 0..num_bits {
+        for (j, &bit) in bits.iter().enumerate() {
             if (i & (1 << j)) != 0 {
-                b |= 1u64 << bits[j];
+                b |= 1u64 << bit;
             }
         }
         result.push(b);
@@ -74,7 +74,7 @@ fn find_rook_magic_and_table(square: usize) -> (u64, Vec<u64>, u8) {
         .map(|&blockers| calculate_rook_attacks(square, blockers))
         .collect();
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     for _ in 0..100_000_000 {
         let magic = rng.random::<u64>() & rng.random::<u64>() & rng.random::<u64>();
@@ -97,7 +97,7 @@ fn find_rook_magic_and_table(square: usize) -> (u64, Vec<u64>, u8) {
         }
     }
 
-    panic!("Failed to find magic number for square {}", square);
+    panic!("Failed to find magic number for square {square}");
 }
 
 
@@ -113,7 +113,7 @@ struct MagicData {
 pub fn generate_rook_data() {
     println!("// --- Rook Magic Bitboard Data (Auto-Generated) ---");
 
-    // 1. Generate and collect all data first
+    // generate and collect all data first
     let all_data: Vec<MagicData> = (0..64)
         .map(|sq| {
             let (magic, table, num_bits) = find_rook_magic_and_table(sq);
@@ -126,61 +126,62 @@ pub fn generate_rook_data() {
         })
         .collect();
 
-    // 2. Calculate offsets and flatten the attack tables
+    // calculate offsets and flatten the attack tables
     let mut offsets = [0; 64];
     let mut flat_attacks = Vec::new();
     let mut current_offset = 0;
 
-    for i in 0..64 {
+    for (i, data) in all_data.iter().enumerate() {
         offsets[i] = current_offset;
-        let table = &all_data[i].attack_table;
+        let table = &data.attack_table;
         flat_attacks.extend_from_slice(table);
         current_offset += table.len();
     }
 
-    // 3. Print all the constants
+    // print all the constants
 
     // MASKS
     println!("pub const ROOK_MASKS: [u64; 64] = [");
-    for i in 0..64 {
+    for (i, data) in all_data.iter().enumerate() {
         if i % 4 == 0 { print!("    "); }
-        print!("0x{:016x}, ", all_data[i].mask);
+        print!("0x{:016x}, ", data.mask);
         if (i + 1) % 4 == 0 { println!(); }
     }
     println!("];\n");
 
     // MAGICS
     println!("pub const ROOK_MAGIC: [u64; 64] = [");
-    for i in 0..64 {
+    for (i, data) in all_data.iter().enumerate() {
         if i % 4 == 0 { print!("    "); }
-        print!("0x{:016x}, ", all_data[i].magic);
+        print!("0x{:016x}, ", data.magic);
         if (i + 1) % 4 == 0 { println!(); }
     }
     println!("];\n");
 
     // SHIFTS
     println!("pub const ROOK_SHIFTS: [u8; 64] = [");
-    for i in 0..64 {
+    for (i, data) in all_data.iter().enumerate() {
         if i % 8 == 0 { print!("    "); }
-        print!("{}, ", all_data[i].shift);
+        print!("{}, ", data.shift);
         if (i + 1) % 8 == 0 { println!(); }
     }
     println!("];\n");
 
     // OFFSETS
     println!("pub const ROOK_OFFSETS: [usize; 64] = [");
-    for i in 0..64 {
+    for (i, offset) in offsets.iter().enumerate() {
         if i % 8 == 0 { print!("    "); }
-        print!("{:>4}, ", offsets[i]);
+        print!("{offset:>4}, ");
         if (i + 1) % 8 == 0 { println!(); }
     }
     println!("];\n");
 
-    // The giant flattened ATTACKS table
-    println!("pub const ROOK_ATTACKS: [u64; {}] = [", flat_attacks.len());
+    // The fat ATTACKS table
+    // Too big for a const
+    println!("pub static ROOK_ATTACKS: [u64; {}] = [", flat_attacks.len());
     for (i, &attack) in flat_attacks.iter().enumerate() {
         if i % 4 == 0 { print!("    "); }
-        print!("0x{:016x}, ", attack);
+        print!("0x{attack:016x}, ");
         if (i + 1) % 4 == 0 { println!(); }
     }
     println!("];");

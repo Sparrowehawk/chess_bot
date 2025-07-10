@@ -57,6 +57,7 @@ impl Bitboard {
             return false;
         }
 
+        // Remove the rights
         match from {
             0 => *castling &= !(1 << 2),
             7 => *castling &= !(1 << 3),

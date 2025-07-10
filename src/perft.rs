@@ -1,6 +1,8 @@
 use crate::game::Game;
 use crate::bitboard::Piece;
 
+
+// Just to enable perft to see how bad everything is
 impl Game {
     pub fn perft(&mut self, depth: u32) -> u64 {
         if depth == 0 {

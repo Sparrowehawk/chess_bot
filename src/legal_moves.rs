@@ -1,8 +1,9 @@
+use crate::Bitboard;
 use crate::bitboard::Piece;
 use crate::game::Game;
-use crate::Bitboard;
 
 impl Game {
+    // Returns all possible moves for each piece
     pub fn generate_pseudo_legal_moves(&self) -> Vec<(usize, usize, Option<Piece>)> {
         let mut moves = Vec::new();
         self.generate_pawn_moves(&mut moves);
@@ -14,6 +15,7 @@ impl Game {
         moves
     }
 
+    // Biggest crutch since atm it isn't pre computed
     fn generate_pawn_moves(&self, moves: &mut Vec<(usize, usize, Option<Piece>)>) {
         let (my_pawns, enemy_pieces, rank_7, rank_2, push_dir) = if self.is_white_turn {
             (self.board.white_pawns, self.board.black_pieces(), 6, 1, 8)
@@ -67,14 +69,22 @@ impl Game {
             let required_rank = if self.is_white_turn { 4 } else { 3 };
             let ep_file = ep_square % 8;
             if ep_file > 0 {
-                let attacker_pos = if self.is_white_turn { ep_square - 9 } else { ep_square + 7 };
+                let attacker_pos = if self.is_white_turn {
+                    ep_square - 9
+                } else {
+                    ep_square + 7
+                };
                 if (attacker_pos / 8 == required_rank) && ((my_pawns & (1u64 << attacker_pos)) != 0)
                 {
                     moves.push((attacker_pos, ep_square, None));
                 }
             }
             if ep_file < 7 {
-                let attacker_pos = if self.is_white_turn { ep_square - 7 } else { ep_square + 9 };
+                let attacker_pos = if self.is_white_turn {
+                    ep_square - 7
+                } else {
+                    ep_square + 9
+                };
                 if (attacker_pos / 8 == required_rank) && ((my_pawns & (1u64 << attacker_pos)) != 0)
                 {
                     moves.push((attacker_pos, ep_square, None));
@@ -83,6 +93,8 @@ impl Game {
         }
     }
 
+    // Rest of these work the same
+    // calls the pre computed bitboard
     fn generate_knight_moves(&self, moves: &mut Vec<(usize, usize, Option<Piece>)>) {
         let (my_knights, my_pieces) = if self.is_white_turn {
             (self.board.white_knight, self.board.white_pieces())
@@ -113,8 +125,8 @@ impl Game {
         let mut bishops = my_bishops;
         while bishops != 0 {
             let from = bishops.trailing_zeros() as usize;
-            let attacks = Bitboard::get_bishop_attacks(from, self.board.all_pieces());
-            let attacks = attacks & !my_pieces;
+            let mut attacks = Bitboard::get_bishop_attacks(from, self.board.all_pieces());
+            attacks &= !my_pieces;
 
             let mut targets = attacks;
             while targets != 0 {
@@ -136,8 +148,8 @@ impl Game {
         let mut rooks = my_rooks;
         while rooks != 0 {
             let from = rooks.trailing_zeros() as usize;
-            let attacks = Bitboard::get_rook_attacks(from, self.board.all_pieces());
-            let attacks = attacks & !my_pieces;
+            let mut attacks = Bitboard::get_rook_attacks(from, self.board.all_pieces());
+            attacks &= !my_pieces;
 
             let mut targets = attacks;
             while targets != 0 {
@@ -160,13 +172,17 @@ impl Game {
         while queens != 0 {
             let from = queens.trailing_zeros() as usize;
             let blockers = self.board.all_pieces();
-            let attacks = (Bitboard::get_rook_attacks(from, blockers) | Bitboard::get_bishop_attacks(from, blockers)) & !my_pieces;
 
-            let mut targets = attacks;
-            while targets != 0 {
-                let to = targets.trailing_zeros() as usize;
+            // A queen's move is the union of a rook's and bishop's moves from the same square.
+            let mut attacks = Bitboard::get_rook_attacks(from, blockers)
+                | Bitboard::get_bishop_attacks(from, blockers);
+            
+            attacks &= !my_pieces; // Can't capture your own pieces
+
+            while attacks != 0 {
+                let to = attacks.trailing_zeros() as usize;
                 moves.push((from, to, None));
-                targets &= targets - 1;
+                attacks &= attacks - 1;
             }
             queens &= queens - 1;
         }
