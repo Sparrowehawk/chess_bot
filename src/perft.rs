@@ -12,9 +12,9 @@ impl Game {
         let moves = self.generate_legal_moves();
         let mut nodes = 0;
 
-        for (from, to, promo) in moves {
+        for (from, to, promo) in moves.iter() {
             let mut new_game = self.clone();
-            if new_game.make_move(from, to, promo) {
+            if new_game.make_move(*from, *to, *promo) {
                 nodes += new_game.perft(depth - 1);
             }
         }
@@ -31,15 +31,15 @@ impl Game {
         let moves = self.generate_legal_moves();
         let mut total_nodes = 0;
 
-        for (from, to, promo) in moves {
+        for (from, to, promo) in moves.iter() {
             let mut new_game = self.clone();
-            if new_game.make_move(from, to, promo) {
+            if new_game.make_move(*from, *to, *promo) {
                 let nodes = new_game.perft(depth - 1);
                 let move_str = format!(
                     "{}{}{}",
-                    self.square_index_to_coord(from),
-                    self.square_index_to_coord(to),
-                    self.promo_to_char(promo)
+                    self.square_index_to_coord(*from),
+                    self.square_index_to_coord(*to),
+                    self.promo_to_char(*promo)
                 );
                 println!("{move_str}: {nodes}");
                 total_nodes += nodes;
@@ -75,15 +75,15 @@ impl Game {
         let moves = self.generate_legal_moves();
         let mut nodes = 0;
     
-        for (from, to, promo) in moves {
+        for (from, to, promo) in moves.iter() {
             let mut new_game = self.clone();
-            if new_game.make_move(from, to, promo) {
+            if new_game.make_move(*from, *to, *promo) {
                 // Add the current move to the history before recursing
                 let move_str = format!(
                     "{}{}{}",
-                    self.square_index_to_coord(from),
-                    self.square_index_to_coord(to),
-                    self.promo_to_char(promo)
+                    self.square_index_to_coord(*from),
+                    self.square_index_to_coord(*to),
+                    self.promo_to_char(*promo)
                 );
                 history.push(move_str);
     

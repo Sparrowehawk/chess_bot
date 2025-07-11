@@ -1,17 +1,73 @@
 use crate::Bitboard;
-pub mod rook_magics;
 pub mod bishop_magics;
+pub mod rook_magics;
 
 // Precaluated knight and king on compile time
 // Sliders are compiled and calculated pre compile into magic bitmaps
 
 const KNIGHT_ATTACKS: [u64; 64] = precalculate_knight_attacks();
 const KING_ATTACKS: [u64; 64] = precalculate_king_attacks();
+const PAWN_ATTACKS: [[u64; 64]; 2] = precalculate_pawn_attacks();
+const PAWN_PUSHES: [[u64; 64]; 2] = precalculate_pawn_pushes();
 
 const FILE_A: u64 = 0x0101010101010101;
 const FILE_B: u64 = 0x0202020202020202;
 const FILE_G: u64 = 0x4040404040404040;
 const FILE_H: u64 = 0x8080808080808080;
+const RANK_2: u64 = 0x000000000000FF00;
+const RANK_7: u64 = 0x00FF000000000000;
+
+const fn shift(bitboard: u64, shift: i8) -> u64 {
+    if shift > 0 {
+        bitboard << shift
+    } else {
+        bitboard >> -shift
+    }
+}
+
+const fn precalculate_pawn_attacks() -> [[u64; 64]; 2] {
+    let mut attacks = [[0u64; 64]; 2];
+    let mut i = 0;
+    while i < 64 {
+        let square = 1u64 << i;
+
+        // White captures
+        let left = shift(square & !FILE_A, 7);
+        let right = shift(square & !FILE_H, 9);
+        attacks[0][i] = left | right;
+
+        // Black captures
+        let left = shift(square & !FILE_A, -9);
+        let right = shift(square & !FILE_H, -7);
+        attacks[1][i] = left | right;
+
+        i += 1;
+    }
+    attacks
+}
+
+const fn precalculate_pawn_pushes() -> [[u64; 64]; 2] {
+    let mut pushes = [[0u64; 64]; 2];
+    let mut i = 0;
+    while i < 64 {
+        let square = 1u64 << i;
+
+        // White pushes
+        pushes[0][i] = shift(square, 8);
+        if square & RANK_2 != 0 {
+            pushes[0][i] |= shift(square, 16);
+        }
+
+        // Black pushes
+        pushes[1][i] = shift(square, -8);
+        if square & RANK_7 != 0 {
+            pushes[1][i] |= shift(square, -16);
+        }
+
+        i += 1;
+    }
+    pushes
+}
 
 const fn precalculate_knight_attacks() -> [u64; 64] {
     let mut attacks = [0u64; 64];
@@ -102,17 +158,25 @@ impl Bitboard {
 
     pub fn get_bishop_attacks(square: usize, all_pieces: u64) -> u64 {
         let blockers = all_pieces & bishop_magics::BISHOP_MASKS[square];
-        let magic_index = (blockers.wrapping_mul(bishop_magics::BISHOP_MAGICS[square]) >> bishop_magics::BISHOP_SHIFTS[square]) as usize;
+        let magic_index = (blockers.wrapping_mul(bishop_magics::BISHOP_MAGICS[square])
+            >> bishop_magics::BISHOP_SHIFTS[square]) as usize;
         let offset = bishop_magics::BISHOP_OFFSETS[square];
         bishop_magics::BISHOP_ATTACKS[offset + magic_index]
     }
-    
 
     pub fn get_rook_attacks(square: usize, all_pieces: u64) -> u64 {
         let blockers = all_pieces & rook_magics::ROOK_MASKS[square];
-        let magic_index = (blockers.wrapping_mul(rook_magics::ROOK_MAGIC[square]) >> rook_magics::ROOK_SHIFTS[square]) as usize;    
+        let magic_index = (blockers.wrapping_mul(rook_magics::ROOK_MAGIC[square])
+            >> rook_magics::ROOK_SHIFTS[square]) as usize;
         let offset = rook_magics::ROOK_OFFSETS[square];
         rook_magics::ROOK_ATTACKS[offset + magic_index]
     }
-    
+
+    pub fn get_pawn_attacks(colour: usize, from: usize) -> u64 {
+        PAWN_ATTACKS[colour][from]
+    }
+
+    pub fn get_pawn_pushes(colour: usize, from: usize) -> u64 {
+        PAWN_PUSHES[colour][from]
+    }
 }

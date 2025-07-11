@@ -91,15 +91,8 @@ impl Bitboard {
             )
         };
 
-        let mut pawn_attacks: u64 = 0;
         // Checks for attacks by pawns
-        if attacker_is_white { 
-            if (position % 8 != 0) && position >= 9 { pawn_attacks |= 1u64 << (position - 9); }
-            if (position % 8 != 7) && position >= 7 { pawn_attacks |= 1u64 << (position - 7); }
-        } else { 
-            if (position % 8 != 0) && position < 56 { pawn_attacks |= 1u64 << (position + 7); }
-            if (position % 8 != 7) && position < 56 { pawn_attacks |= 1u64 << (position + 9); }
-        }
+        let pawn_attacks = Bitboard::get_pawn_attacks(if attacker_is_white {1} else {0}, position);
 
         if pawn_attacks & opponent_pawn != 0 {
             return  true;

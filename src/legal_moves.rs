@@ -1,11 +1,12 @@
+use crate::movelist::MoveList;
 use crate::Bitboard;
 use crate::bitboard::Piece;
 use crate::game::Game;
 
 impl Game {
     // Returns all possible moves for each piece
-    pub fn generate_pseudo_legal_moves(&self) -> Vec<(usize, usize, Option<Piece>)> {
-        let mut moves = Vec::new();
+    pub fn generate_pseudo_legal_moves(&self) -> MoveList {
+        let mut moves = MoveList::new();
         self.generate_pawn_moves(&mut moves);
         self.generate_knight_moves(&mut moves);
         self.generate_bishop_moves(&mut moves);
@@ -16,11 +17,25 @@ impl Game {
     }
 
     // Biggest crutch since atm it isn't pre computed
-    fn generate_pawn_moves(&self, moves: &mut Vec<(usize, usize, Option<Piece>)>) {
-        let (my_pawns, enemy_pieces, rank_7, rank_2, push_dir) = if self.is_white_turn {
-            (self.board.white_pawns, self.board.black_pieces(), 6, 1, 8)
+    fn generate_pawn_moves(&self,  moves: &mut MoveList) {
+        let (my_pawns, enemy_pieces, rank_7, rank_2, push_dir, colour) = if self.is_white_turn {
+            (
+                self.board.white_pawns,
+                self.board.black_pieces(),
+                6,
+                1,
+                8,
+                0,
+            )
         } else {
-            (self.board.black_pawns, self.board.white_pieces(), 1, 6, -8)
+            (
+                self.board.black_pawns,
+                self.board.white_pieces(),
+                1,
+                6,
+                -8,
+                1,
+            )
         };
 
         let all_pieces = self.board.all_pieces();
@@ -28,40 +43,40 @@ impl Game {
 
         while pawns != 0 {
             let from = pawns.trailing_zeros() as usize;
-            let push = (from as i8 + push_dir) as usize;
 
-            if (all_pieces & (1u64 << push)) == 0 {
+            let mut push_targets = Bitboard::get_pawn_pushes(colour, from) & !all_pieces;
+            while push_targets != 0 {
+                let to = push_targets.trailing_zeros() as usize;
+
                 if from / 8 == rank_7 {
-                    moves.push((from, push, Some(Piece::Queen)));
-                    moves.push((from, push, Some(Piece::Rook)));
-                    moves.push((from, push, Some(Piece::Bishop)));
-                    moves.push((from, push, Some(Piece::Knight)));
+                    moves.add(from, to, Some(Piece::Queen));
+                    moves.add(from, to, Some(Piece::Rook));
+                    moves.add(from, to, Some(Piece::Bishop));
+                    moves.add(from, to, Some(Piece::Knight));
                 } else {
-                    moves.push((from, push, None));
+                    moves.add(from, to, None);
                 }
-                if from / 8 == rank_2 {
-                    let double_push = (from as i8 + 2 * push_dir) as usize;
-                    if (all_pieces & (1u64 << double_push)) == 0 {
-                        moves.push((from, double_push, None));
-                    }
-                }
+
+                push_targets &= push_targets - 1; // Clear the lowest set bit
             }
-            for &capture_dir in &[-1, 1] {
-                if (from % 8 == 0 && capture_dir == -1) || (from % 8 == 7 && capture_dir == 1) {
-                    continue;
+
+            let mut capture_targets = Bitboard::get_pawn_attacks(colour, from) & enemy_pieces;
+            
+            while capture_targets != 0 {
+                let to = capture_targets.trailing_zeros() as usize;
+
+                if from / 8 == rank_7 {
+                    moves.add(from, to, Some(Piece::Queen));
+                    moves.add(from, to, Some(Piece::Rook));
+                    moves.add(from, to, Some(Piece::Bishop));
+                    moves.add(from, to, Some(Piece::Knight));
+                } else {
+                    moves.add(from, to, None);
                 }
-                let to = (from as i8 + push_dir + capture_dir) as usize;
-                if (enemy_pieces & (1u64 << to)) != 0 {
-                    if from / 8 == rank_7 {
-                        moves.push((from, to, Some(Piece::Queen)));
-                        moves.push((from, to, Some(Piece::Rook)));
-                        moves.push((from, to, Some(Piece::Bishop)));
-                        moves.push((from, to, Some(Piece::Knight)));
-                    } else {
-                        moves.push((from, to, None));
-                    }
-                }
+
+                capture_targets &= capture_targets - 1;
             }
+
             pawns &= pawns - 1;
         }
 
@@ -76,7 +91,7 @@ impl Game {
                 };
                 if (attacker_pos / 8 == required_rank) && ((my_pawns & (1u64 << attacker_pos)) != 0)
                 {
-                    moves.push((attacker_pos, ep_square, None));
+                    moves.add(attacker_pos, ep_square, None);
                 }
             }
             if ep_file < 7 {
@@ -87,7 +102,7 @@ impl Game {
                 };
                 if (attacker_pos / 8 == required_rank) && ((my_pawns & (1u64 << attacker_pos)) != 0)
                 {
-                    moves.push((attacker_pos, ep_square, None));
+                    moves.add(attacker_pos, ep_square, None);
                 }
             }
         }
@@ -95,7 +110,7 @@ impl Game {
 
     // Rest of these work the same
     // calls the pre computed bitboard
-    fn generate_knight_moves(&self, moves: &mut Vec<(usize, usize, Option<Piece>)>) {
+    fn generate_knight_moves(&self, moves: &mut MoveList) {
         let (my_knights, my_pieces) = if self.is_white_turn {
             (self.board.white_knight, self.board.white_pieces())
         } else {
@@ -108,14 +123,14 @@ impl Game {
             attacks &= !my_pieces;
             while attacks != 0 {
                 let to = attacks.trailing_zeros() as usize;
-                moves.push((from, to, None));
+                moves.add(from, to, None);
                 attacks &= attacks - 1;
             }
             knights &= knights - 1;
         }
     }
 
-    fn generate_bishop_moves(&self, moves: &mut Vec<(usize, usize, Option<Piece>)>) {
+    fn generate_bishop_moves(&self, moves: &mut MoveList) {
         let (my_bishops, my_pieces) = if self.is_white_turn {
             (self.board.white_bishop, self.board.white_pieces())
         } else {
@@ -131,14 +146,14 @@ impl Game {
             let mut targets = attacks;
             while targets != 0 {
                 let to = targets.trailing_zeros() as usize;
-                moves.push((from, to, None));
+                moves.add(from, to, None);
                 targets &= targets - 1;
             }
             bishops &= bishops - 1;
         }
     }
 
-    fn generate_rook_moves(&self, moves: &mut Vec<(usize, usize, Option<Piece>)>) {
+    fn generate_rook_moves(&self, moves: &mut MoveList) {
         let (my_rooks, my_pieces) = if self.is_white_turn {
             (self.board.white_rook, self.board.white_pieces())
         } else {
@@ -154,14 +169,14 @@ impl Game {
             let mut targets = attacks;
             while targets != 0 {
                 let to = targets.trailing_zeros() as usize;
-                moves.push((from, to, None));
+                moves.add(from, to, None);
                 targets &= targets - 1;
             }
             rooks &= rooks - 1;
         }
     }
 
-    fn generate_queen_moves(&self, moves: &mut Vec<(usize, usize, Option<Piece>)>) {
+    fn generate_queen_moves(&self, moves: &mut MoveList) {
         let (my_queens, my_pieces) = if self.is_white_turn {
             (self.board.white_queen, self.board.white_pieces())
         } else {
@@ -176,19 +191,19 @@ impl Game {
             // A queen's move is the union of a rook's and bishop's moves from the same square.
             let mut attacks = Bitboard::get_rook_attacks(from, blockers)
                 | Bitboard::get_bishop_attacks(from, blockers);
-            
+
             attacks &= !my_pieces; // Can't capture your own pieces
 
             while attacks != 0 {
                 let to = attacks.trailing_zeros() as usize;
-                moves.push((from, to, None));
+                moves.add(from, to, None);
                 attacks &= attacks - 1;
             }
             queens &= queens - 1;
         }
     }
 
-    fn generate_king_moves(&self, moves: &mut Vec<(usize, usize, Option<Piece>)>) {
+    fn generate_king_moves(&self, moves: &mut MoveList) {
         let (my_king, my_pieces) = if self.is_white_turn {
             (self.board.white_king, self.board.white_pieces())
         } else {
@@ -202,7 +217,7 @@ impl Game {
         attacks &= !my_pieces;
         while attacks != 0 {
             let to = attacks.trailing_zeros() as usize;
-            moves.push((from, to, None));
+            moves.add(from, to, None);
             attacks &= attacks - 1;
         }
         let all = self.board.all_pieces();
@@ -212,14 +227,14 @@ impl Game {
                 && !self.board.possible_check(4, false)
                 && !self.board.possible_check(5, false)
             {
-                moves.push((4, 6, None));
+                moves.add(4, 6, None);
             }
             if (self.castling & 0b0100) != 0
                 && (all & 0xE) == 0
                 && !self.board.possible_check(4, false)
                 && !self.board.possible_check(3, false)
             {
-                moves.push((4, 2, None));
+                moves.add(4, 2, None);
             }
         } else {
             if (self.castling & 0b0010) != 0
@@ -227,14 +242,14 @@ impl Game {
                 && !self.board.possible_check(60, true)
                 && !self.board.possible_check(61, true)
             {
-                moves.push((60, 62, None));
+                moves.add(60, 62, None);
             }
             if (self.castling & 0b0001) != 0
                 && (all & 0xE00000000000000) == 0
                 && !self.board.possible_check(60, true)
                 && !self.board.possible_check(59, true)
             {
-                moves.push((60, 58, None));
+                moves.add(60, 58, None);
             }
         }
     }

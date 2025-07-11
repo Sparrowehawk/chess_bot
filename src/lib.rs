@@ -7,6 +7,11 @@ pub mod const_moves;
 pub mod fen;
 pub mod test_runner;
 
+pub mod movelist;
+pub mod transposition_table;
+pub mod search;
+pub mod uci;
+
 // pub use parser::Parser;
 pub use bitboard::Bitboard;
 pub use game::Game;

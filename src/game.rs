@@ -1,10 +1,13 @@
 use crate::bitboard::{Bitboard, Piece};
+use crate::movelist::MoveList;
+use crate::transposition_table::TranspositionTable;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::{
     collections::HashMap,
     io::{self, Write},
 };
+use std::sync::{Arc, Mutex};
 
 use crate::parser::parse_move;
 #[derive(Clone)]
@@ -14,6 +17,14 @@ pub struct Game {
     pub castling: u8, // This will be represented with a 8 digit binary
     pub en_passent: Option<usize>,
     pub position_history: HashMap<u64, u32>, // Essentially, en_passent moves are pushed onto the vec and popped off after 1 turn
+    pub tt: Arc<Mutex<TranspositionTable>>,
+}
+#[derive(Clone)]
+pub struct Undo {
+    board: Bitboard,
+    castling: u8,
+    en_passent: Option<usize>,
+    is_white_turn: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -43,6 +54,7 @@ impl Default for Game {
             castling: 0b11111111,
             en_passent: None,
             position_history: HashMap::new(),
+            tt: Arc::new(Mutex::new(TranspositionTable::new())),
         }
     }
 }
@@ -165,17 +177,17 @@ impl Game {
         }
     }
 
-    pub fn generate_legal_moves(&self) -> Vec<(usize, usize, Option<Piece>)> {
+    pub fn generate_legal_moves(&self) -> MoveList {
         // Takes all moves, checks if the game can process them
 
-        let mut legal_moves = Vec::new();
+        let mut legal_moves = MoveList::new();
 
         let pseudo_legal_moves = self.generate_pseudo_legal_moves();
 
-        for &(from, to, promo) in &pseudo_legal_moves {
+        for &(from, to, promo) in pseudo_legal_moves.iter() {
             let mut temp_game = self.clone();
-            if temp_game.make_move(from, to, promo){
-                legal_moves.push((from, to, promo));
+            if temp_game.make_move(from, to, promo) {
+                legal_moves.add(from, to, promo);
             }
         }
         legal_moves
@@ -208,8 +220,53 @@ impl Game {
         }
     }
 
+    /// Apply a move without legality check, returning the Undo data.
+    pub fn make_move_unchecked(&mut self, from: usize, to: usize, promo: Option<Piece>) -> Undo {
+        let undo = Undo {
+            board: self.board.clone(),
+            castling: self.castling,
+            en_passent: self.en_passent,
+            is_white_turn: self.is_white_turn,
+        };
+
+        let from_mask = 1u64 << from;
+        self.en_passent = None;
+
+        if (self.board.white_pawns | self.board.black_pawns) & from_mask != 0 {
+            self.board.move_pawn(
+                from,
+                to,
+                self.is_white_turn,
+                promo,
+                undo.en_passent,
+                &mut self.en_passent,
+            );
+        } else if (self.board.white_knight | self.board.black_knight) & from_mask != 0 {
+            self.board.move_knight(from, to, self.is_white_turn);
+        } else if (self.board.white_bishop | self.board.black_bishop) & from_mask != 0 {
+            self.board.move_bishop(from, to, self.is_white_turn);
+        } else if (self.board.white_rook | self.board.black_rook) & from_mask != 0 {
+            self.board.move_rook(from, to, self.is_white_turn, &mut self.castling);
+        } else if (self.board.white_queen | self.board.black_queen) & from_mask != 0 {
+            self.board.move_queen(from, to, self.is_white_turn);
+        } else if (self.board.white_king | self.board.black_king) & from_mask != 0 {
+            self.board.move_king(from, to, self.is_white_turn, &mut self.castling);
+        }
+
+        self.is_white_turn = !self.is_white_turn;
+        undo
+    }
+
+    /// Revert a move using undo info.
+    pub fn unmake_move(&mut self, undo: Undo) {
+        self.board = undo.board;
+        self.castling = undo.castling;
+        self.en_passent = undo.en_passent;
+        self.is_white_turn = undo.is_white_turn;
+    }
+
     // Used for 3 fold repitition
-    fn hash_position(&self) -> u64 {
+    pub fn hash_position(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.board.all_pieces().hash(&mut hasher);
         self.is_white_turn.hash(&mut hasher);
