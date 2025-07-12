@@ -6,4 +6,5 @@ default-run = "chess_bot"
 
 [dependencies]
 chess = "3.2.0"
+once_cell = "1.21.3"
 rand = "0.9.1"

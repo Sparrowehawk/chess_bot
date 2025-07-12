@@ -17,7 +17,7 @@ pub struct Bitboard {
     pub black_knight: u64,
     pub black_pawns: u64,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Piece {
     King,
     Queen,
@@ -25,6 +25,20 @@ pub enum Piece {
     Bishop,
     Knight,
     Pawn,
+}
+
+impl Piece {
+    pub fn from_index(index: usize) -> Option<Self> {
+        match index {
+            0 => Some(Piece::Pawn),
+            1 => Some(Piece::Knight),
+            2 => Some(Piece::Bishop),
+            3 => Some(Piece::Rook),
+            4 => Some(Piece::Queen),
+            5 => Some(Piece::King),
+            _ => None,
+        }
+    }
 }
 
 impl Bitboard {

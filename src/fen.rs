@@ -1,7 +1,5 @@
 use crate::{Game, bitboard::Bitboard, transposition_table::TranspositionTable};
-use std::cell::RefCell;
 use std::collections::HashMap; // Ensure HashMap is in scope if not already.
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 impl Game {
@@ -133,6 +131,7 @@ impl Game {
             en_passent,
             position_history: HashMap::new(),
             tt: Arc::new(Mutex::new(TranspositionTable::new())),
+            zobrist_hash: 0,
         })
     }
 }

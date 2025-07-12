@@ -1,13 +1,17 @@
 use crate::bitboard::{Bitboard, Piece};
 use crate::movelist::MoveList;
 use crate::transposition_table::TranspositionTable;
+use crate::zobrist::ZobristKeys;
+use once_cell::sync::Lazy;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::sync::{Arc, Mutex};
 use std::{
     collections::HashMap,
     io::{self, Write},
 };
-use std::sync::{Arc, Mutex};
+
+pub static ZOBRIST_KEYS: Lazy<ZobristKeys> = Lazy::new(|| ZobristKeys::new());
 
 use crate::parser::parse_move;
 #[derive(Clone)]
@@ -18,13 +22,14 @@ pub struct Game {
     pub en_passent: Option<usize>,
     pub position_history: HashMap<u64, u32>, // Essentially, en_passent moves are pushed onto the vec and popped off after 1 turn
     pub tt: Arc<Mutex<TranspositionTable>>,
+    pub zobrist_hash: u64,
 }
 #[derive(Clone)]
 pub struct Undo {
-    board: Bitboard,
-    castling: u8,
-    en_passent: Option<usize>,
-    is_white_turn: bool,
+    pub board: Bitboard,
+    pub castling: u8,
+    pub en_passent: Option<usize>,
+    pub is_white_turn: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -38,24 +43,18 @@ pub enum GameState {
 
 impl Default for Game {
     fn default() -> Self {
-        // for castling :
-        // 1U << 0 : black castling on queen side available
-        // 1U << 1 : black castling on king side available
-        // 1U << 2 : white castling on queen side available
-        // 1U << 3 : white castling on king side available
-        // 1U << 4 : black has not castled
-        // 1U << 5 : white has not castled
-        // 1U << 6 : black not in check
-        // 1U << 7 : white not in check
-
-        Self {
+        let game = Self {
             board: Bitboard::new(),
             is_white_turn: true,
             castling: 0b11111111,
             en_passent: None,
             position_history: HashMap::new(),
             tt: Arc::new(Mutex::new(TranspositionTable::new())),
-        }
+            zobrist_hash: 0,
+        };
+        let mut game = game;
+        game.zobrist_hash = game.compute_zobrist_hash();
+        game
     }
 }
 
@@ -229,6 +228,49 @@ impl Game {
             is_white_turn: self.is_white_turn,
         };
 
+        // Remove hash for side to move
+        self.zobrist_hash ^= ZOBRIST_KEYS.side_to_move_key;
+
+        // XOR out old en passant if any
+        if let Some(ep_square) = self.en_passent {
+            let file = ep_square % 8;
+            self.zobrist_hash ^= ZOBRIST_KEYS.en_passent_keys[file];
+        }
+
+        // XOR out old castling rights
+        let old_castling_index = (self.castling & 0x0F) as usize;
+        self.zobrist_hash ^= ZOBRIST_KEYS.castling_keys[old_castling_index];
+
+        // XOR out piece on from square
+        let piece_opt = self.get_piece_at(from);
+        if let Some(piece) = piece_opt {
+            let color = if self.is_white_turn { 0 } else { 1 };
+            let piece_type = match piece {
+                Piece::Pawn => 0,
+                Piece::Knight => 1,
+                Piece::Bishop => 2,
+                Piece::Rook => 3,
+                Piece::Queen => 4,
+                Piece::King => 5,
+            };
+            self.zobrist_hash ^= ZOBRIST_KEYS.piece_keys[color][piece_type][from];
+        }
+
+        // XOR out piece on to square if captured
+        if let Some(captured) = self.get_piece_at(to) {
+            let captured_color = if !self.is_white_turn { 0 } else { 1 };
+            let captured_piece_type = match captured {
+                Piece::Pawn => 0,
+                Piece::Knight => 1,
+                Piece::Bishop => 2,
+                Piece::Rook => 3,
+                Piece::Queen => 4,
+                Piece::King => 5,
+            };
+            self.zobrist_hash ^= ZOBRIST_KEYS.piece_keys[captured_color][captured_piece_type][to];
+        }
+
+        // Now make the move on the board as you already do
         let from_mask = 1u64 << from;
         self.en_passent = None;
 
@@ -246,14 +288,44 @@ impl Game {
         } else if (self.board.white_bishop | self.board.black_bishop) & from_mask != 0 {
             self.board.move_bishop(from, to, self.is_white_turn);
         } else if (self.board.white_rook | self.board.black_rook) & from_mask != 0 {
-            self.board.move_rook(from, to, self.is_white_turn, &mut self.castling);
+            self.board
+                .move_rook(from, to, self.is_white_turn, &mut self.castling);
         } else if (self.board.white_queen | self.board.black_queen) & from_mask != 0 {
             self.board.move_queen(from, to, self.is_white_turn);
         } else if (self.board.white_king | self.board.black_king) & from_mask != 0 {
-            self.board.move_king(from, to, self.is_white_turn, &mut self.castling);
+            self.board
+                .move_king(from, to, self.is_white_turn, &mut self.castling);
+        }
+
+        // XOR in new en passant if any
+        if let Some(ep_square) = self.en_passent {
+            let file = ep_square % 8;
+            self.zobrist_hash ^= ZOBRIST_KEYS.en_passent_keys[file];
+        }
+
+        // XOR in new castling rights
+        let new_castling_index = (self.castling & 0x0F) as usize;
+        self.zobrist_hash ^= ZOBRIST_KEYS.castling_keys[new_castling_index];
+
+        // XOR in piece on to square (moved piece)
+        if let Some(piece) = self.get_piece_at(to) {
+            let color = if self.is_white_turn { 0 } else { 1 };
+            let piece_type = match piece {
+                Piece::Pawn => 0,
+                Piece::Knight => 1,
+                Piece::Bishop => 2,
+                Piece::Rook => 3,
+                Piece::Queen => 4,
+                Piece::King => 5,
+            };
+            self.zobrist_hash ^= ZOBRIST_KEYS.piece_keys[color][piece_type][to];
         }
 
         self.is_white_turn = !self.is_white_turn;
+
+        // XOR in side to move again for the new side
+        self.zobrist_hash ^= ZOBRIST_KEYS.side_to_move_key;
+
         undo
     }
 
@@ -263,6 +335,8 @@ impl Game {
         self.castling = undo.castling;
         self.en_passent = undo.en_passent;
         self.is_white_turn = undo.is_white_turn;
+
+        self.zobrist_hash = self.compute_zobrist_hash();
     }
 
     // Used for 3 fold repitition

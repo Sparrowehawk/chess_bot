@@ -7,6 +7,7 @@ pub mod const_moves;
 pub mod fen;
 pub mod test_runner;
 
+pub mod zobrist;
 pub mod movelist;
 pub mod transposition_table;
 pub mod search;

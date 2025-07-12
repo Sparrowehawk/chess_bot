@@ -18,7 +18,7 @@ impl Game {
 
     // Biggest crutch since atm it isn't pre computed
     fn generate_pawn_moves(&self,  moves: &mut MoveList) {
-        let (my_pawns, enemy_pieces, rank_7, rank_2, push_dir, colour) = if self.is_white_turn {
+        let (my_pawns, enemy_pieces, rank_7, _rank_2, _push_dir, colour) = if self.is_white_turn {
             (
                 self.board.white_pawns,
                 self.board.black_pieces(),
