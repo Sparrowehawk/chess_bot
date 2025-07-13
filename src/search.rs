@@ -1,4 +1,3 @@
-// Optimized search.rs module
 use crate::bitboard::Piece;
 use crate::game::Game;
 use crate::transposition_table::Flag;
@@ -24,12 +23,10 @@ type KillerMove = Option<(usize, usize, Option<Piece>)>;
 static LMR_TABLE: [[u8; MAX_LMR_MOVES]; MAX_LMR_DEPTH] =
     unsafe { std::mem::transmute(*include_bytes!(concat!(env!("OUT_DIR"), "/lmr.bin"))) };
 pub struct Search {
-    // Stores two "killer moves" for each ply. These are quiet moves that caused a beta cutoff.
     killer_moves: [[KillerMove; 2]; MAX_PLY],
-    // History heuristic table: [piece][to_square]
-    // Scores quiet moves based on how often they are successful.
     history: [[i32; 64]; 12],
 }
+
 
 impl Default for Search {
     fn default() -> Self {
@@ -167,6 +164,7 @@ impl Game {
         max_depth: u8,
         stop_signal: &Arc<AtomicBool>,
     ) -> (Option<(usize, usize, Option<Piece>)>, i32) {
+        self.tt.lock().unwrap().clear();
         let mut best_move = None;
         let mut best_score = -MATE_SCORE;
         let mut search_helper = Search::new();
@@ -180,6 +178,7 @@ impl Game {
                 stop_signal,
                 &mut search_helper,
             );
+
             let duration = start_time.elapsed();
             best_score = score;
 
@@ -187,22 +186,45 @@ impl Game {
                 break;
             }
 
-            if let Some(entry) = self.tt.lock().unwrap().probe(self.hash_position()) {
-                if let Some(m) = entry.best_move {
-                    best_move = Some(m);
+            let mut pv = Vec::new();
+            let mut temp_game = self.clone(); // Create a temporary board to walk the PV
+            for _ in 0..depth {
+                let entry = temp_game
+                    .tt
+                    .lock()
+                    .unwrap()
+                    .probe(temp_game.zobrist_hash);
+                if let Some(entry) = entry {
+                    if let Some(mv) = entry.best_move {
+                        pv.push(mv);
+                        temp_game.make_move_unchecked(mv.0, mv.1, mv.2);
+                    } else {
+                        break; // Stop if no best move is found
+                    }
+                } else {
+                    break; // Stop if position not in TT
                 }
             }
+
+            // The best move is the first move of our reconstructed PV
+            best_move = pv.first().copied();
+
+            let pv_string = pv
+                .iter()
+                .map(|m| self.move_to_uci(*m))
+                .collect::<Vec<_>>()
+                .join(" ");
 
             if best_score.abs() >= MATE_THRESHOLD {
                 let mate_in = (MATE_SCORE - best_score.abs() + 1) / 2;
                 let sign = if best_score > 0 { "" } else { "-" };
                 println!(
-                    "info depth {depth} score mate {sign}{mate_in} time {}",
+                    "info depth {depth} score mate {sign}{mate_in} time {} pv {pv_string}",
                     duration.as_millis()
                 );
             } else {
                 println!(
-                    "info depth {depth} score cp {best_score} time {}",
+                    "info depth {depth} score cp {best_score} time {} pv {pv_string}",
                     duration.as_millis()
                 );
             }
@@ -214,6 +236,33 @@ impl Game {
         (best_move, best_score)
     }
 
+    pub fn move_to_uci(&self, mov: (usize, usize, Option<Piece>)) -> String {
+        let from_sq = mov.0;
+        let to_sq = mov.1;
+        let promo = mov.2;
+
+        let from_str = format!(
+            "{}{}",
+            ((from_sq % 8) as u8 + b'a') as char,
+            (from_sq / 8) + 1
+        );
+        let to_str = format!("{}{}", ((to_sq % 8) as u8 + b'a') as char, (to_sq / 8) + 1);
+
+        let promo_str = if let Some(p) = promo {
+            match p {
+                Piece::Queen => "q",
+                Piece::Rook => "r",
+                Piece::Bishop => "b",
+                Piece::Knight => "n",
+                _ => "",
+            }
+        } else {
+            ""
+        };
+
+        format!("{from_str}{to_str}{promo_str}")
+    }
+
     fn search(
         &mut self,
         depth: u8,
@@ -222,6 +271,7 @@ impl Game {
         stop_signal: &Arc<AtomicBool>,
         search_helper: &mut Search,
     ) -> i32 {
+        self.check_board_integrity("search entry");
         if depth == 0 {
             return self.quiescence_search(alpha, beta, search_helper);
         }
@@ -230,7 +280,7 @@ impl Game {
             return 0;
         }
 
-        let key = self.hash_position();
+        let key = self.zobrist_hash;
         if let Some(entry) = self.tt.lock().unwrap().probe(key) {
             if entry.depth >= depth {
                 match entry.flag {
@@ -263,7 +313,7 @@ impl Game {
                     & if self.is_white_turn {
                         self.board.black_pieces()
                     } else {
-                        self.board.white_pieces() // you had black_pieces twice, fixed here
+                        self.board.white_pieces()
                     }
                     == 0;
 
@@ -276,6 +326,7 @@ impl Game {
             }
 
             let undo = self.make_move_unchecked(m.0, m.1, m.2);
+            let undo_clone = undo.clone(); // Clone or copy the undo value
             let score = if reduce > 0 && depth > 2 {
                 // reduced search
                 let reduced_depth = depth.saturating_sub(reduce);
@@ -297,6 +348,11 @@ impl Game {
                 -self.search(depth - 1, -beta, -alpha, stop_signal, search_helper)
             };
 
+            // self.check_board_integrity(&format!("before unmake of {}{}", self.move_to_uci(*m), if self.is_white_turn {" (w)"} else {" (b)"} ));
+            // self.unmake_move(undo_clone); // Use the cloned value
+            // self.check_board_integrity(&format!("after unmake of {}{}", self.move_to_uci(*m), if self.is_white_turn {" (w)"} else {" (b)"}));
+
+            let piece = self.get_piece_at(m.0);
             self.unmake_move(undo);
 
             if stop_signal.load(Ordering::Relaxed) {
@@ -317,7 +373,7 @@ impl Game {
             }
 
             if is_quiet {
-                if let Some(piece) = self.get_piece_at(m.0) {
+                if let Some(piece) = piece {
                     search_helper.add_killer_move(ply, *m);
                     search_helper.update_history_score(piece, m.1, depth as i32);
                 }
@@ -352,6 +408,10 @@ impl Game {
         moves.sort_by_cached_key(|m| -(self.score_move(*m, ply, search_helper)));
 
         for m in moves.iter() {
+            if self.static_exchange_loses(m.0, m.1) {
+                continue;
+            }
+
             let undo = self.make_move_unchecked(m.0, m.1, m.2);
             let score = -self.quiescence_search(-beta, -alpha, search_helper);
             self.unmake_move(undo);
@@ -364,6 +424,140 @@ impl Game {
             }
         }
         alpha
+    }
+
+    fn static_exchange_loses(&self, from: usize, to: usize) -> bool {
+        let mut occupied = self.board.all_pieces();
+        let mut white_attackers = self.board.attackers_to(to, true);
+        let mut black_attackers = self.board.attackers_to(to, false);
+
+        let mut gain = [0i32; 32];
+        let mut depth = 0;
+
+        // Who's turn is it?
+        let mut side = self.is_white_turn;
+
+        // Get initial attacker and victim
+        let mut piece = self.get_piece_at(from).unwrap();
+        gain[0] = PIECE_VALUES[self.get_piece_at(to).unwrap() as usize];
+
+        // Remove the initial attacker from the board
+        occupied &= !(1u64 << from);
+        if side {
+            white_attackers &= !(1u64 << from);
+        } else {
+            black_attackers &= !(1u64 << from);
+        }
+
+        side = !side;
+
+        loop {
+            depth += 1;
+            gain[depth] = PIECE_VALUES[piece as usize] - gain[depth - 1];
+
+            // Decide which side moves next
+            let next_attackers = if side {
+                white_attackers
+            } else {
+                black_attackers
+            };
+
+            if next_attackers == 0 {
+                break;
+            }
+
+            // Pick least valuable attacker
+            let next_attacker_sq = Self::least_valuable_piece(self, next_attackers, side);
+            if let Some(sq) = next_attacker_sq {
+                piece = self.get_piece_at(sq).unwrap();
+                occupied &= !(1u64 << sq);
+
+                if side {
+                    white_attackers &= !(1u64 << sq);
+                } else {
+                    black_attackers &= !(1u64 << sq);
+                }
+
+                // Recalculate x-ray attackers (simplified)
+                // If sliding pieces are behind the target square, re-add them
+                // (Optional and complex, can be skipped for speed)
+
+                side = !side;
+            } else {
+                break;
+            }
+        }
+
+        // Backward evaluation: assume opponent makes best choices
+        while depth > 0 {
+            depth -= 1;
+            gain[depth] = -gain[depth + 1].max(-gain[depth]);
+        }
+
+        gain[0] < 0
+    }
+
+    fn least_valuable_piece(&self, attackers: u64, is_white: bool) -> Option<usize> {
+        let board = &self.board;
+        let piece_order = [
+            (
+                Piece::Pawn,
+                if is_white {
+                    board.white_pawns
+                } else {
+                    board.black_pawns
+                },
+            ),
+            (
+                Piece::Knight,
+                if is_white {
+                    board.white_knight
+                } else {
+                    board.black_knight
+                },
+            ),
+            (
+                Piece::Bishop,
+                if is_white {
+                    board.white_bishop
+                } else {
+                    board.black_bishop
+                },
+            ),
+            (
+                Piece::Rook,
+                if is_white {
+                    board.white_rook
+                } else {
+                    board.black_rook
+                },
+            ),
+            (
+                Piece::Queen,
+                if is_white {
+                    board.white_queen
+                } else {
+                    board.black_queen
+                },
+            ),
+            (
+                Piece::King,
+                if is_white {
+                    board.white_king
+                } else {
+                    board.black_king
+                },
+            ),
+        ];
+
+        for (_piece, bb) in piece_order.iter() {
+            let masked = attackers & bb;
+            if masked != 0 {
+                return Some(masked.trailing_zeros() as usize);
+            }
+        }
+
+        None
     }
 
     fn score_move(
@@ -433,21 +627,18 @@ impl Game {
         None
     }
 
-    fn eval(&self) -> i32 {
-        // 1. Calculate the base score for each side
+    pub fn eval(&self) -> i32 {
         let (white_mg, white_eg, white_phase) = self.calculate_score(true);
         let (black_mg, black_eg, black_phase) = self.calculate_score(false);
 
-        // 2. Taper the score based on the game phase
         let total_phase = (white_phase + black_phase).min(MAX_PHASE);
         let mg_score = white_mg - black_mg;
         let eg_score = white_eg - black_eg;
 
-        // The tapered score calculation remains the same
         let blended_score =
             (mg_score * total_phase + eg_score * (MAX_PHASE - total_phase)) / MAX_PHASE;
 
-        // 3. Apply perspective
+
         let perspective = if self.is_white_turn { 1 } else { -1 };
         (blended_score + TEMPO_BONUS) * perspective
     }

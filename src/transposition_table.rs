@@ -57,6 +57,10 @@ impl TranspositionTable {
         }
         None
     }
+
+    pub fn clear(&mut self) {
+        self.table.clear();
+    }
 }
 
 impl Default for TranspositionTable {

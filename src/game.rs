@@ -10,8 +10,9 @@ use std::{
     collections::HashMap,
     io::{self, Write},
 };
+use array_init;
 
-pub static ZOBRIST_KEYS: Lazy<ZobristKeys> = Lazy::new(|| ZobristKeys::new());
+pub static ZOBRIST_KEYS: Lazy<ZobristKeys> = Lazy::new(ZobristKeys::new);
 
 use crate::parser::parse_move;
 #[derive(Clone)]
@@ -26,10 +27,13 @@ pub struct Game {
 }
 #[derive(Clone)]
 pub struct Undo {
-    pub board: Bitboard,
-    pub castling: u8,
-    pub en_passent: Option<usize>,
-    pub is_white_turn: bool,
+    pub from: usize,
+    pub to: usize,
+    pub captured_piece: Option<Piece>,
+    pub promotion: Option<Piece>,
+    pub previous_castling_rights: u8,
+    pub previous_en_passant_square: Option<usize>,
+    pub previous_zobrist_hash: u64, 
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -72,12 +76,10 @@ impl Game {
         let en_passent_available = self.en_passent;
         self.en_passent = None;
 
-        // If they put a user input and it's not for promo
         if promo.is_some() && (self.board.white_pawns | self.board.black_pawns) & from_mask == 0 {
             return false;
         }
 
-        // Test is a move is sucessful or not
         let move_success = if (self.board.white_pawns | self.board.black_pawns) & from_mask != 0 {
             self.board.move_pawn(
                 from,
@@ -100,7 +102,6 @@ impl Game {
             self.board
                 .move_king(from, to, self.is_white_turn, &mut self.castling)
         } else {
-            // No piece was on the 'from' square
             false
         };
 
@@ -114,11 +115,16 @@ impl Game {
             self.board.black_king
         };
 
+        if king_board == 0 {
+            self.board = original_board;
+            self.castling = original_castling;
+            self.en_passent = original_en_passent;
+            return false;
+        }
+
         let king_pos = king_board.trailing_zeros() as usize;
 
-        // Check if the new move will put the king as check
         if self.board.possible_check(king_pos, !self.is_white_turn) {
-            // Revert if so
             self.board = original_board;
             self.castling = original_castling;
             self.en_passent = original_en_passent;
@@ -136,6 +142,10 @@ impl Game {
         } else {
             self.board.black_king
         };
+
+        if king_board == 0 {
+            return false;
+        }
 
         let king_pos = king_board.trailing_zeros() as usize;
         self.board.possible_check(king_pos, !self.is_white_turn)
@@ -177,10 +187,7 @@ impl Game {
     }
 
     pub fn generate_legal_moves(&self) -> MoveList {
-        // Takes all moves, checks if the game can process them
-
         let mut legal_moves = MoveList::new();
-
         let pseudo_legal_moves = self.generate_pseudo_legal_moves();
 
         for &(from, to, promo) in pseudo_legal_moves.iter() {
@@ -190,6 +197,110 @@ impl Game {
             }
         }
         legal_moves
+    }
+
+    pub fn check_board_integrity(&self, location_msg: &str) {
+        // 1. Check for overlapping pieces on the same square
+        let bitboards = [
+            self.board.white_pawns,
+            self.board.white_knight,
+            self.board.white_bishop,
+            self.board.white_rook,
+            self.board.white_queen,
+            self.board.white_king,
+            self.board.black_pawns,
+            self.board.black_knight,
+            self.board.black_bishop,
+            self.board.black_rook,
+            self.board.black_queen,
+            self.board.black_king,
+        ];
+        let mut occupied = 0u64;
+        for (i, bb) in bitboards.iter().enumerate() {
+            if (occupied & bb) != 0 {
+                self.print_piece_placement_debug(location_msg);
+                let overlap_sq = (occupied & bb).trailing_zeros();
+                panic!(
+                    "Board integrity failed at '{location_msg}': Overlap on square {overlap_sq} in bitboard index {i}. bb = {bb}, bitboards = {bitboards:?}"
+                );
+            }
+            occupied |= bb;
+        }
+
+        // 2. Check for pawns on the 1st or 8th rank, which is illegal
+        const RANK_1: u64 = 0x00000000000000FF;
+        const RANK_8: u64 = 0xFF00000000000000;
+
+        if (self.board.white_pawns & (RANK_1 | RANK_8)) != 0 {
+            let bad_pawn_sq = (self.board.white_pawns & (RANK_1 | RANK_8)).trailing_zeros();
+            panic!(
+                "Board integrity failed at '{location_msg}': White pawn on illegal rank! Square: {bad_pawn_sq}"
+            );
+        }
+        if (self.board.black_pawns & (RANK_1 | RANK_8)) != 0 {
+            let bad_pawn_sq = (self.board.black_pawns & (RANK_1 | RANK_8)).trailing_zeros();
+            panic!(
+                "Board integrity failed at '{location_msg}': Black pawn on illegal rank! Square: {bad_pawn_sq}"
+            );
+        }
+    }
+
+    pub fn print_piece_placement_debug(&self, location_msg: &str) {
+        let mut square_owners: [Vec<&str>; 64] = array_init::array_init(|_| Vec::new());
+
+        let pieces = [
+            (self.board.white_pawns, "P"),
+            (self.board.white_knight, "N"),
+            (self.board.white_bishop, "B"),
+            (self.board.white_rook, "R"),
+            (self.board.white_queen, "Q"),
+            (self.board.white_king, "K"),
+            (self.board.black_pawns, "p"),
+            (self.board.black_knight, "n"),
+            (self.board.black_bishop, "b"),
+            (self.board.black_rook, "r"),
+            (self.board.black_queen, "q"),
+            (self.board.black_king, "k"),
+        ];
+
+        for (bitboard, piece_name) in pieces.iter() {
+            let mut bb = *bitboard;
+            while bb != 0 {
+                let sq = bb.trailing_zeros() as usize;
+                square_owners[sq].push(piece_name);
+                bb &= bb - 1; // clear the lowest bit
+            }
+        }
+
+        println!("--- Piece placement debug: {location_msg} ---");
+        for rank in (0..8).rev() {
+            print!("ROW {}: ", rank + 1);
+            for file in 0..8 {
+                let sq = rank * 8 + file;
+                let entry = &square_owners[sq];
+                if entry.is_empty() {
+                    print!(". ");
+                } else if entry.len() == 1 {
+                    print!("{} ", entry[0]);
+                } else {
+                    print!("X "); // Overlap marker
+                }
+            }
+            println!();
+        }
+        println!("    a b c d e f g h");
+
+        // Also print which squares are overlapped
+        for (sq, owners) in square_owners.iter().enumerate() {
+            if owners.len() > 1 {
+                println!(
+                    "⚠️  Overlap on square {}{}: {:?}",
+                    (b'a' + (sq % 8) as u8) as char,
+                    1 + (sq / 8),
+                    owners
+                );
+            }
+        }
     }
 
     pub fn game_state(&mut self) -> GameState {
@@ -219,68 +330,80 @@ impl Game {
         }
     }
 
-    /// Apply a move without legality check, returning the Undo data.
+    fn get_piece_and_color(&self, square: usize) -> (Option<Piece>, Option<bool>) {
+        let mask = 1u64 << square;
+        if (self.board.white_pawns & mask) != 0 {
+            return (Some(Piece::Pawn), Some(true));
+        }
+        if (self.board.black_pawns & mask) != 0 {
+            return (Some(Piece::Pawn), Some(false));
+        }
+        if (self.board.white_knight & mask) != 0 {
+            return (Some(Piece::Knight), Some(true));
+        }
+        if (self.board.black_knight & mask) != 0 {
+            return (Some(Piece::Knight), Some(false));
+        }
+        if (self.board.white_bishop & mask) != 0 {
+            return (Some(Piece::Bishop), Some(true));
+        }
+        if (self.board.black_bishop & mask) != 0 {
+            return (Some(Piece::Bishop), Some(false));
+        }
+        if (self.board.white_rook & mask) != 0 {
+            return (Some(Piece::Rook), Some(true));
+        }
+        if (self.board.black_rook & mask) != 0 {
+            return (Some(Piece::Rook), Some(false));
+        }
+        if (self.board.white_queen & mask) != 0 {
+            return (Some(Piece::Queen), Some(true));
+        }
+        if (self.board.black_queen & mask) != 0 {
+            return (Some(Piece::Queen), Some(false));
+        }
+        if (self.board.white_king & mask) != 0 {
+            return (Some(Piece::King), Some(true));
+        }
+        if (self.board.black_king & mask) != 0 {
+            return (Some(Piece::King), Some(false));
+        }
+        (None, None)
+    }
+
     pub fn make_move_unchecked(&mut self, from: usize, to: usize, promo: Option<Piece>) -> Undo {
+        let piece_moving = self.get_piece_at(from).expect("No piece on 'from' square");
+        let previous_en_passant = self.en_passent;
+
+        let mut captured_piece = self.get_piece_at(to);
+        let is_en_passant_capture = piece_moving == Piece::Pawn && Some(to) == previous_en_passant;
+        if is_en_passant_capture {
+            captured_piece = Some(Piece::Pawn);
+        }
+
+        // Create the Undo struct with the correct information BEFORE modifying the board
         let undo = Undo {
-            board: self.board.clone(),
-            castling: self.castling,
-            en_passent: self.en_passent,
-            is_white_turn: self.is_white_turn,
+            from,
+            to,
+            captured_piece, // Now correct for en-passant
+            promotion: promo,
+            previous_castling_rights: self.castling,
+            previous_en_passant_square: self.en_passent,
+            previous_zobrist_hash: self.zobrist_hash, 
         };
 
-        // Remove hash for side to move
-        self.zobrist_hash ^= ZOBRIST_KEYS.side_to_move_key;
 
-        // XOR out old en passant if any
-        if let Some(ep_square) = self.en_passent {
-            let file = ep_square % 8;
-            self.zobrist_hash ^= ZOBRIST_KEYS.en_passent_keys[file];
-        }
-
-        // XOR out old castling rights
-        let old_castling_index = (self.castling & 0x0F) as usize;
-        self.zobrist_hash ^= ZOBRIST_KEYS.castling_keys[old_castling_index];
-
-        // XOR out piece on from square
-        let piece_opt = self.get_piece_at(from);
-        if let Some(piece) = piece_opt {
-            let color = if self.is_white_turn { 0 } else { 1 };
-            let piece_type = match piece {
-                Piece::Pawn => 0,
-                Piece::Knight => 1,
-                Piece::Bishop => 2,
-                Piece::Rook => 3,
-                Piece::Queen => 4,
-                Piece::King => 5,
-            };
-            self.zobrist_hash ^= ZOBRIST_KEYS.piece_keys[color][piece_type][from];
-        }
-
-        // XOR out piece on to square if captured
-        if let Some(captured) = self.get_piece_at(to) {
-            let captured_color = if !self.is_white_turn { 0 } else { 1 };
-            let captured_piece_type = match captured {
-                Piece::Pawn => 0,
-                Piece::Knight => 1,
-                Piece::Bishop => 2,
-                Piece::Rook => 3,
-                Piece::Queen => 4,
-                Piece::King => 5,
-            };
-            self.zobrist_hash ^= ZOBRIST_KEYS.piece_keys[captured_color][captured_piece_type][to];
-        }
-
-        // Now make the move on the board as you already do
-        let from_mask = 1u64 << from;
         self.en_passent = None;
 
+        // Perform the actual board update
+        let from_mask = 1u64 << from;
         if (self.board.white_pawns | self.board.black_pawns) & from_mask != 0 {
             self.board.move_pawn(
                 from,
                 to,
                 self.is_white_turn,
                 promo,
-                undo.en_passent,
+                previous_en_passant, // Pass the original en passant state
                 &mut self.en_passent,
             );
         } else if (self.board.white_knight | self.board.black_knight) & from_mask != 0 {
@@ -297,49 +420,134 @@ impl Game {
                 .move_king(from, to, self.is_white_turn, &mut self.castling);
         }
 
-        // XOR in new en passant if any
-        if let Some(ep_square) = self.en_passent {
-            let file = ep_square % 8;
-            self.zobrist_hash ^= ZOBRIST_KEYS.en_passent_keys[file];
-        }
-
-        // XOR in new castling rights
-        let new_castling_index = (self.castling & 0x0F) as usize;
-        self.zobrist_hash ^= ZOBRIST_KEYS.castling_keys[new_castling_index];
-
-        // XOR in piece on to square (moved piece)
-        if let Some(piece) = self.get_piece_at(to) {
-            let color = if self.is_white_turn { 0 } else { 1 };
-            let piece_type = match piece {
-                Piece::Pawn => 0,
-                Piece::Knight => 1,
-                Piece::Bishop => 2,
-                Piece::Rook => 3,
-                Piece::Queen => 4,
-                Piece::King => 5,
-            };
-            self.zobrist_hash ^= ZOBRIST_KEYS.piece_keys[color][piece_type][to];
-        }
-
+        // Flip turn
         self.is_white_turn = !self.is_white_turn;
 
-        // XOR in side to move again for the new side
-        self.zobrist_hash ^= ZOBRIST_KEYS.side_to_move_key;
+        self.zobrist_hash = self.compute_zobrist_hash();
 
         undo
     }
 
-    /// Revert a move using undo info.
     pub fn unmake_move(&mut self, undo: Undo) {
-        self.board = undo.board;
-        self.castling = undo.castling;
-        self.en_passent = undo.en_passent;
-        self.is_white_turn = undo.is_white_turn;
+        println!("\n--- START UNMAKE ---");
+        println!(
+            "Undoing move: {}{}",
+            self.move_to_uci((undo.from, undo.to, undo.promotion)),
+            if !self.is_white_turn { " (w)" } else { " (b)" }
+        );
+        println!(
+            "Captured: {:?}, Promo: {:?}",
+            undo.captured_piece, undo.promotion
+        );
+        self.check_board_integrity("entry to unmake");
 
-        self.zobrist_hash = self.compute_zobrist_hash();
+        self.is_white_turn = !self.is_white_turn;
+        let color_that_moved = self.is_white_turn;
+        self.castling = undo.previous_castling_rights;
+        self.en_passent = undo.previous_en_passant_square;
+
+        let from = undo.from;
+        let to = undo.to;
+
+
+        if let Some(promoted_piece) = undo.promotion {
+            println!("Unmaking promotion...");
+            self.remove_piece(to, promoted_piece, color_that_moved);
+            self.check_board_integrity("after removing promoted piece");
+            self.add_piece(from, Piece::Pawn, color_that_moved);
+            self.check_board_integrity("after adding pawn back");
+        } else {
+            let (moved_piece_opt, moved_color_opt) = self.get_piece_and_color(to);
+            if let (Some(moved_piece), Some(moved_color)) = (moved_piece_opt, moved_color_opt) {
+                self.move_piece(from, to, moved_piece, moved_color);
+            } else {
+                panic!("unmake_move: piece to move back not found at 'to' square {to}");
+            }
+        }
+
+        if let Some(captured_piece) = undo.captured_piece {
+            let captured_color = !color_that_moved;
+            println!(
+                "Restoring captured piece: {:?} for color {}",
+                captured_piece,
+                if captured_color { "white" } else { "black" }
+            );
+
+            let moved_piece_was_pawn = self.get_piece_at(from) == Some(Piece::Pawn);
+            let is_en_passant_capture =
+                moved_piece_was_pawn && Some(to) == undo.previous_en_passant_square;
+
+            let capture_square = if is_en_passant_capture {
+                println!("This was an en-passant capture restoration.");
+                if color_that_moved { to - 8 } else { to + 8 }
+            } else {
+                to
+            };
+
+            println!("Adding captured piece to square {capture_square}");
+            self.add_piece(capture_square, captured_piece, captured_color);
+            self.check_board_integrity("after restoring captured piece"); // ISSUE IS HERE
+            println!("uwu")
+        }
+
+        self.zobrist_hash = undo.previous_zobrist_hash;
+        println!("--- END UNMAKE ---");
     }
 
-    // Used for 3 fold repitition
+    fn get_piece_bb_mut(&mut self, piece: Piece, is_white: bool) -> &mut u64 {
+        match (is_white, piece) {
+            (true, Piece::Pawn) => &mut self.board.white_pawns,
+            (true, Piece::Knight) => &mut self.board.white_knight,
+            (true, Piece::Bishop) => &mut self.board.white_bishop,
+            (true, Piece::Rook) => &mut self.board.white_rook,
+            (true, Piece::Queen) => &mut self.board.white_queen,
+            (true, Piece::King) => &mut self.board.white_king,
+            (false, Piece::Pawn) => &mut self.board.black_pawns,
+            (false, Piece::Knight) => &mut self.board.black_knight,
+            (false, Piece::Bishop) => &mut self.board.black_bishop,
+            (false, Piece::Rook) => &mut self.board.black_rook,
+            (false, Piece::Queen) => &mut self.board.black_queen,
+            (false, Piece::King) => &mut self.board.black_king,
+        }
+    }
+
+    fn add_piece(&mut self, square: usize, piece: Piece, is_white: bool) {
+        let mask = 1u64 << square;
+
+        let mut all_bitboards = [
+            &mut self.board.white_pawns,
+            &mut self.board.white_knight,
+            &mut self.board.white_bishop,
+            &mut self.board.white_rook,
+            &mut self.board.white_queen,
+            &mut self.board.white_king,
+            &mut self.board.black_pawns,
+            &mut self.board.black_knight,
+            &mut self.board.black_bishop,
+            &mut self.board.black_rook,
+            &mut self.board.black_queen,
+            &mut self.board.black_king,
+        ];
+
+        for bb in all_bitboards.iter_mut() {
+            **bb &= !mask;
+        }
+
+        let bitboard = self.board.get_mut_board(piece, is_white);
+        *bitboard |= mask;
+    }
+
+    fn remove_piece(&mut self, square: usize, piece: Piece, is_white: bool) {
+        let bitboard = self.get_piece_bb_mut(piece, is_white);
+        *bitboard &= !(1u64 << square);
+    }
+
+    fn move_piece(&mut self, from: usize, to: usize, piece: Piece, is_white: bool) {
+        let bitboard = self.get_piece_bb_mut(piece, is_white);
+        let move_mask = (1u64 << from) | (1u64 << to);
+        *bitboard ^= move_mask;
+    }
+
     pub fn hash_position(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.board.all_pieces().hash(&mut hasher);

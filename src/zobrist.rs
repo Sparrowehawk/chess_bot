@@ -1,6 +1,7 @@
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 
+use crate::bitboard::Piece;
 use crate::game::ZOBRIST_KEYS;
 use crate::Game;
 
@@ -51,57 +52,53 @@ impl ZobristKeys {
 }
 
 impl Game {
+    fn get_piece_at_hash(&self, square: usize) -> Option<Piece> {
+        let mask = 1u64 << square;
+        if (self.board.white_pawns | self.board.black_pawns) & mask != 0 {
+            return Some(Piece::Pawn);
+        }
+        if (self.board.white_knight | self.board.black_knight) & mask != 0 {
+            return Some(Piece::Knight);
+        }
+        if (self.board.white_bishop | self.board.black_bishop) & mask != 0 {
+            return Some(Piece::Bishop);
+        }
+        if (self.board.white_rook | self.board.black_rook) & mask != 0 {
+            return Some(Piece::Rook);
+        }
+        if (self.board.white_queen | self.board.black_queen) & mask != 0 {
+            return Some(Piece::Queen);
+        }
+        if (self.board.white_king | self.board.black_king) & mask != 0 {
+            return Some(Piece::King);
+        }
+        None
+    }
+
+
+    /// Computes the Zobrist hash for the current board state from scratch.
+    /// This version is much more efficient than the previous one.
     pub fn compute_zobrist_hash(&self) -> u64 {
         let mut hash = 0u64;
 
-        // Map your Bitboard pieces to indices: Pawn=0, Knight=1, Bishop=2, Rook=3, Queen=4, King=5
-        // Color: White=0, Black=1
-
+        // Iterate through all squares and use the helper function to find the piece.
         for sq in 0..64 {
-            let mask = 1u64 << sq;
-
-            let color = if (self.board.white_pawns | self.board.white_knight | self.board.white_bishop
-                | self.board.white_rook | self.board.white_queen | self.board.white_king) & mask != 0
-            {
-                0
-            } else if (self.board.black_pawns | self.board.black_knight | self.board.black_bishop
-                | self.board.black_rook | self.board.black_queen | self.board.black_king) & mask != 0
-            {
-                1
-            } else {
-                continue;
-            };
-
-            let piece_type = if (self.board.white_pawns | self.board.black_pawns) & mask != 0 {
-                0
-            } else if (self.board.white_knight | self.board.black_knight) & mask != 0 {
-                1
-            } else if (self.board.white_bishop | self.board.black_bishop) & mask != 0 {
-                2
-            } else if (self.board.white_rook | self.board.black_rook) & mask != 0 {
-                3
-            } else if (self.board.white_queen | self.board.black_queen) & mask != 0 {
-                4
-            } else if (self.board.white_king | self.board.black_king) & mask != 0 {
-                5
-            } else {
-                continue;
-            };
-
-            hash ^= ZOBRIST_KEYS.piece_keys[color][piece_type][sq];
+            if let Some(piece) = self.get_piece_at_hash(sq) {
+                // Determine the color by checking the combined white/black piece bitboards.
+                let color_index = if self.board.white_pieces() & (1u64 << sq) != 0 { 0 } else { 1 };
+                hash ^= ZOBRIST_KEYS.piece_keys[color_index][piece as usize][sq];
+            }
         }
 
-        // Castling rights (4 bits? You store as u8, just use lower 4 bits)
+        // The rest of your hashing logic is correct and remains the same.
         let castling_index = (self.castling & 0x0F) as usize;
         hash ^= ZOBRIST_KEYS.castling_keys[castling_index];
 
-        // En passant file
         if let Some(ep_square) = self.en_passent {
             let file = ep_square % 8;
             hash ^= ZOBRIST_KEYS.en_passent_keys[file];
         }
 
-        // Side to move
         if self.is_white_turn {
             hash ^= ZOBRIST_KEYS.side_to_move_key;
         }

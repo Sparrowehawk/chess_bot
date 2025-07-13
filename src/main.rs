@@ -1,7 +1,7 @@
-// use std::time::Instant;
+use std::time::Instant;
 
 // use std::time::Instant;
-// use chess_bot::{test_runner::run_tests, Game};
+use chess_bot::{test_runner::run_tests, Game};
 
 use chess_bot::uci::uci_loop;
 
@@ -11,21 +11,22 @@ fn main() {
     // let mut game = Game::new();
     
     // game.perft_divide(6);
-    // let fen = "4r2k/pp1q1p2/2p1r3/3b1N1p/3P1b1P/1PQ3N1/P4PP1/3RR1K1 w - - 1 27";
-    // match Game::from_fen(fen) {
-    //     Ok(mut game) => {
-    //         println!("Successfully loaded position from FEN.");
-    //         game.board.print_board();
+    let fen = "rnbqk1nr/1pp1bpp1/p2p3p/4p3/3PP3/P2B4/1PPQ1PPP/RNB1K1NR w KQkq - 2 6";
+    match Game::from_fen(fen) {
+        Ok(mut game) => {
+            println!("Successfully loaded position from FEN.");
+            game.board.print_board();
+            println!("Eval in this pos is: {}", game.eval());
 
-    //         use std::sync::{Arc, atomic::AtomicBool};
-    //         let stop_flag = Arc::new(AtomicBool::new(false));
-    //         let (best_move, eval) = game.find_best_move(7, &stop_flag); // Added the second argument
-    //         println!("{best_move:?}, {eval}");
-    //     }
-    //     Err(e) => {
-    //         println!("Failed to load FEN: {e}");
-    //     }
-    // }
+            use std::sync::{Arc, atomic::AtomicBool};
+            let stop_flag = Arc::new(AtomicBool::new(false));
+            let (best_move, eval) = game.find_best_move(7, &stop_flag); // Added the second argument
+            println!("{best_move:?}, {eval}");
+        }
+        Err(e) => {
+            println!("Failed to load FEN: {e}");
+        }
+    }
 
     // let file_path = "./src/perftsuite.txt";
     // println!("--- Running Perft Test Suite from '{file_path}' ---");
@@ -36,6 +37,6 @@ fn main() {
 
     // let duration = start.elapsed();
     // println!("Time taken: {duration:.3?}");
-    uci_loop();
+    // uci_loop();
 }
 

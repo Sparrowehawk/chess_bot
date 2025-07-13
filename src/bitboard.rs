@@ -1,7 +1,6 @@
 pub mod display;
 pub mod moves;
 
-
 #[derive(Clone)] // Mainly used in tests
 pub struct Bitboard {
     pub white_king: u64,
@@ -39,6 +38,17 @@ impl Piece {
             _ => None,
         }
     }
+
+    pub fn to_index(&self) -> usize {
+        match self {
+            Piece::Pawn => 0,
+            Piece::Knight => 1,
+            Piece::Bishop => 2,
+            Piece::Rook => 3,
+            Piece::Queen => 4,
+            Piece::King => 5,
+        }
+    }
 }
 
 impl Bitboard {
@@ -49,8 +59,18 @@ impl Bitboard {
     // Useful for setting for testing
     pub fn empty() -> Self {
         Bitboard {
-            white_king: 0, white_queen: 0, white_rook: 0, white_bishop: 0, white_knight: 0, white_pawns: 0,
-            black_king: 0, black_queen: 0, black_rook: 0, black_bishop: 0, black_knight: 0, black_pawns: 0,
+            white_king: 0,
+            white_queen: 0,
+            white_rook: 0,
+            white_bishop: 0,
+            white_knight: 0,
+            white_pawns: 0,
+            black_king: 0,
+            black_queen: 0,
+            black_rook: 0,
+            black_bishop: 0,
+            black_knight: 0,
+            black_pawns: 0,
         }
     }
 
@@ -95,7 +115,6 @@ impl Bitboard {
             )
         } else {
             (
-
                 self.black_pawns,
                 self.black_knight,
                 self.black_bishop,
@@ -106,16 +125,19 @@ impl Bitboard {
         };
 
         // Checks for attacks by pawns
-        let pawn_attacks = Bitboard::get_pawn_attacks(if attacker_is_white {1} else {0}, position);
+        let pawn_attacks =
+            Bitboard::get_pawn_attacks(if attacker_is_white { 1 } else { 0 }, position);
 
         if pawn_attacks & opponent_pawn != 0 {
-            return  true;
+            return true;
         }
 
-            
-        if (self.get_knight_attacks(position) & opponent_knight) != 0 { return true; }
-        if (self.get_king_attacks(position) & opponent_king) != 0 { return true; }
-
+        if (self.get_knight_attacks(position) & opponent_knight) != 0 {
+            return true;
+        }
+        if (self.get_king_attacks(position) & opponent_king) != 0 {
+            return true;
+        }
 
         // Sliding attack
         // Queen is a combined rook and bishop
@@ -123,15 +145,48 @@ impl Bitboard {
         let bishop_queen = opponent_bishop | opponent_queen;
         let rook_queen = opponent_rook | opponent_queen;
 
-
-        if (Self::get_bishop_attacks(position, all_pieces) & bishop_queen) != 0 { return true; }
-        if (Self::get_rook_attacks(position, all_pieces) & rook_queen) != 0 { return true; }
-
-
+        if (Self::get_bishop_attacks(position, all_pieces) & bishop_queen) != 0 {
+            return true;
+        }
+        if (Self::get_rook_attacks(position, all_pieces) & rook_queen) != 0 {
+            return true;
+        }
 
         false
     }
 
+    pub fn attackers_to(&self, square: usize, is_white: bool) -> u64 {
+        let occupied = self.all_pieces();
+        let (pawns, knights, bishops, rooks, queens, king) = if is_white {
+            (
+                self.white_pawns,
+                self.white_knight,
+                self.white_bishop,
+                self.white_rook,
+                self.white_queen,
+                self.white_king,
+            )
+        } else {
+            (
+                self.black_pawns,
+                self.black_knight,
+                self.black_bishop,
+                self.black_rook,
+                self.black_queen,
+                self.black_king,
+            )
+        };
+
+        let mut attackers = 0;
+        attackers |= pawns & Bitboard::get_pawn_attacks(is_white as usize, square);
+        attackers |= knights & self.get_knight_attacks(square);
+        attackers |= bishops & Self::get_bishop_attacks(square, occupied);
+        attackers |= rooks & Self::get_rook_attacks(square, occupied);
+        attackers |= queens & Self::get_rook_attacks(square, occupied)
+            | Self::get_bishop_attacks(square, occupied);
+        attackers |= king & self.get_king_attacks(square);
+        attackers
+    }
 }
 
 // Noraml setup for a normal game
