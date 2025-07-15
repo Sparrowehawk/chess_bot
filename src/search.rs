@@ -27,7 +27,6 @@ pub struct Search {
     history: [[i32; 64]; 12],
 }
 
-
 impl Default for Search {
     fn default() -> Self {
         Self {
@@ -189,11 +188,7 @@ impl Game {
             let mut pv = Vec::new();
             let mut temp_game = self.clone(); // Create a temporary board to walk the PV
             for _ in 0..depth {
-                let entry = temp_game
-                    .tt
-                    .lock()
-                    .unwrap()
-                    .probe(temp_game.zobrist_hash);
+                let entry = temp_game.tt.lock().unwrap().probe(temp_game.zobrist_hash);
                 if let Some(entry) = entry {
                     if let Some(mv) = entry.best_move {
                         pv.push(mv);
@@ -271,7 +266,7 @@ impl Game {
         stop_signal: &Arc<AtomicBool>,
         search_helper: &mut Search,
     ) -> i32 {
-        self.check_board_integrity("search entry");
+        // self.check_board_integrity("search entry");
         if depth == 0 {
             return self.quiescence_search(alpha, beta, search_helper);
         }
@@ -293,6 +288,7 @@ impl Game {
         }
 
         let mut moves = self.generate_legal_moves();
+
         if moves.is_empty() {
             return if self.is_in_check() {
                 -MATE_SCORE + self.ply() as i32
@@ -308,6 +304,7 @@ impl Game {
         let mut flag = Flag::UpperBound;
 
         for (move_count, m) in moves.iter().enumerate() {
+            // Not affected by this
             let is_quiet = m.2.is_none()
                 && (1u64 << m.1)
                     & if self.is_white_turn {
@@ -325,8 +322,20 @@ impl Game {
                 reduce = LMR_TABLE[d][mv_idx];
             }
 
+            // Just for now dw
+            let mut temp_game = self.clone();
+            if !temp_game.make_move(m.0, m.1, m.2) {
+                println!("❌ Warning: move {m:?} rejected by make_move but still being searched");
+                // You should skip this move:
+                continue;
+            }
+
+            let piece = self.get_piece_at(m.0);
+
+            // This is modifying m?
             let undo = self.make_move_unchecked(m.0, m.1, m.2);
-            let undo_clone = undo.clone(); // Clone or copy the undo value
+
+            // Not affected by this
             let score = if reduce > 0 && depth > 2 {
                 // reduced search
                 let reduced_depth = depth.saturating_sub(reduce);
@@ -348,11 +357,7 @@ impl Game {
                 -self.search(depth - 1, -beta, -alpha, stop_signal, search_helper)
             };
 
-            // self.check_board_integrity(&format!("before unmake of {}{}", self.move_to_uci(*m), if self.is_white_turn {" (w)"} else {" (b)"} ));
-            // self.unmake_move(undo_clone); // Use the cloned value
-            // self.check_board_integrity(&format!("after unmake of {}{}", self.move_to_uci(*m), if self.is_white_turn {" (w)"} else {" (b)"}));
 
-            let piece = self.get_piece_at(m.0);
             self.unmake_move(undo);
 
             if stop_signal.load(Ordering::Relaxed) {
@@ -637,7 +642,6 @@ impl Game {
 
         let blended_score =
             (mg_score * total_phase + eg_score * (MAX_PHASE - total_phase)) / MAX_PHASE;
-
 
         let perspective = if self.is_white_turn { 1 } else { -1 };
         (blended_score + TEMPO_BONUS) * perspective

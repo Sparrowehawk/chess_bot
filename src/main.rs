@@ -11,16 +11,18 @@ fn main() {
     // let mut game = Game::new();
     
     // game.perft_divide(6);
-    let fen = "rnbqk1nr/1pp1bpp1/p2p3p/4p3/3PP3/P2B4/1PPQ1PPP/RNB1K1NR w KQkq - 2 6";
+    let fen = "rnbqkb1r/pp1ppppp/2p2n2/8/3P1B2/4P3/PPP2PPP/RN1QKBNR b KQkq - 0 3";
     match Game::from_fen(fen) {
         Ok(mut game) => {
             println!("Successfully loaded position from FEN.");
             game.board.print_board();
             println!("Eval in this pos is: {}", game.eval());
 
+            // game.perft_divide(6);
+
             use std::sync::{Arc, atomic::AtomicBool};
             let stop_flag = Arc::new(AtomicBool::new(false));
-            let (best_move, eval) = game.find_best_move(7, &stop_flag); // Added the second argument
+            let (best_move, eval) = game.find_best_move(6, &stop_flag); // Added the second argument
             println!("{best_move:?}, {eval}");
         }
         Err(e) => {
