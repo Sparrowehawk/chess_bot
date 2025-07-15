@@ -215,8 +215,7 @@ impl Game {
             }
         }
 
-        let legal = legal_moves;
-        legal
+        legal_moves
     }
 
     pub fn game_state(&mut self) -> GameState {
@@ -307,14 +306,11 @@ impl Game {
             previous_zobrist_hash: self.zobrist_hash,
         };
 
-        // --- Start Incremental Hash Update ---
         let mut new_hash = self.zobrist_hash;
         let color_idx = if self.is_white_turn { 0 } else { 1 };
 
-        // 1. XOR out the piece from its starting square
         new_hash ^= ZOBRIST_KEYS.piece_keys[color_idx][piece_moving as usize][from];
 
-        // 2. XOR out the captured piece (if any)
         if let Some(captured) = captured_piece {
             let captured_color_idx = 1 - color_idx;
             let capture_square = if is_en_passant_capture {
@@ -326,28 +322,19 @@ impl Game {
                 ZOBRIST_KEYS.piece_keys[captured_color_idx][captured as usize][capture_square];
         }
 
-        // 3. XOR in the moving piece at its new square (handle promotion)
         let final_piece = promo.unwrap_or(piece_moving);
         new_hash ^= ZOBRIST_KEYS.piece_keys[color_idx][final_piece as usize][to];
 
-        // 4. Update castling rights
         new_hash ^= ZOBRIST_KEYS.castling_keys[(self.castling & 0xF) as usize]; // XOR out old rights
-        // The move function will update self.castling
-        // ...
 
-        // 5. Update en passant square
+
         if let Some(ep_sq) = self.en_passent {
             new_hash ^= ZOBRIST_KEYS.en_passent_keys[ep_sq % 8];
         }
-        // ... move function will set new en_passent square ...
 
-        // 6. Flip side to move
         new_hash ^= ZOBRIST_KEYS.side_to_move_key;
-        // --- End Incremental Hash Update ---
 
-        // --- Execute Move on the Board ---
-        self.en_passent = None; // Reset before move
-        // (Call the appropriate self.board.move_<piece> function as before)
+        self.en_passent = None; 
         if piece_moving == Piece::Pawn {
             self.board.move_pawn(
                 from,
@@ -371,10 +358,9 @@ impl Game {
                 .move_king(from, to, self.is_white_turn, &mut self.castling);
         }
 
-        // --- Finalize Hash Update ---
-        new_hash ^= ZOBRIST_KEYS.castling_keys[(self.castling & 0xF) as usize]; // XOR in new rights
+        new_hash ^= ZOBRIST_KEYS.castling_keys[(self.castling & 0xF) as usize]; 
         if let Some(ep_sq) = self.en_passent {
-            new_hash ^= ZOBRIST_KEYS.en_passent_keys[ep_sq % 8]; // XOR in new en passant
+            new_hash ^= ZOBRIST_KEYS.en_passent_keys[ep_sq % 8]; 
         }
 
         self.is_white_turn = !self.is_white_turn;
