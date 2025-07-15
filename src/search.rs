@@ -357,7 +357,6 @@ impl Game {
                 -self.search(depth - 1, -beta, -alpha, stop_signal, search_helper)
             };
 
-
             self.unmake_move(undo);
 
             if stop_signal.load(Ordering::Relaxed) {

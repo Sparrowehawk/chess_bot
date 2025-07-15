@@ -106,22 +106,6 @@ impl Game {
             false
         };
 
-        
-        if from == 6 && to == 21{
-        if (self.board.white_pawns | self.board.black_pawns) & from_mask != 0 {
-            println!("1");
-        } else if (self.board.white_knight | self.board.black_knight) & from_mask != 0 {
-            println!("2");
-        } else if (self.board.white_bishop | self.board.black_bishop) & from_mask != 0 {
-            println!("3");
-        } else if (self.board.white_rook | self.board.black_rook) & from_mask != 0 {
-            println!("4");
-        } else if (self.board.white_queen | self.board.black_queen) & from_mask != 0 {
-            println!("5");
-        } else if (self.board.white_king | self.board.black_king) & from_mask != 0 {
-            println!("6");
-        };}
-
         if !move_success {
             return false;
         }
@@ -327,14 +311,13 @@ impl Game {
 
         new_hash ^= ZOBRIST_KEYS.castling_keys[(self.castling & 0xF) as usize]; // XOR out old rights
 
-
         if let Some(ep_sq) = self.en_passent {
             new_hash ^= ZOBRIST_KEYS.en_passent_keys[ep_sq % 8];
         }
 
         new_hash ^= ZOBRIST_KEYS.side_to_move_key;
 
-        self.en_passent = None; 
+        self.en_passent = None;
         if piece_moving == Piece::Pawn {
             self.board.move_pawn(
                 from,
@@ -358,9 +341,9 @@ impl Game {
                 .move_king(from, to, self.is_white_turn, &mut self.castling);
         }
 
-        new_hash ^= ZOBRIST_KEYS.castling_keys[(self.castling & 0xF) as usize]; 
+        new_hash ^= ZOBRIST_KEYS.castling_keys[(self.castling & 0xF) as usize];
         if let Some(ep_sq) = self.en_passent {
-            new_hash ^= ZOBRIST_KEYS.en_passent_keys[ep_sq % 8]; 
+            new_hash ^= ZOBRIST_KEYS.en_passent_keys[ep_sq % 8];
         }
 
         self.is_white_turn = !self.is_white_turn;
