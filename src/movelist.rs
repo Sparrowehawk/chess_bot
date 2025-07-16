@@ -1,7 +1,7 @@
 use crate::bitboard::Piece;
 use std::slice::Iter;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MoveList {
     moves: Vec<(usize, usize, Option<Piece>)>,
 }

@@ -187,6 +187,46 @@ impl Bitboard {
         attackers |= king & self.get_king_attacks(square);
         attackers
     }
+
+    pub fn attackers_to_with_occupied(&self, square: usize, is_white: bool, occupied: u64) -> u64 {
+        // Note: We use the `occupied` parameter instead of calling `self.all_pieces()`
+        let (pawns, knights, bishops, rooks, queens, king) = if is_white {
+            (
+                self.white_pawns,
+                self.white_knight,
+                self.white_bishop,
+                self.white_rook,
+                self.white_queen,
+                self.white_king,
+            )
+        } else {
+            (
+                self.black_pawns,
+                self.black_knight,
+                self.black_bishop,
+                self.black_rook,
+                self.black_queen,
+                self.black_king,
+            )
+        };
+
+        let mut attackers = 0;
+        // Pawn attacks don't depend on occupancy
+        attackers |= pawns & Bitboard::get_pawn_attacks(is_white as usize, square);
+
+        // Knight and King attacks also don't depend on occupancy
+        attackers |= knights & self.get_knight_attacks(square);
+        attackers |= king & self.get_king_attacks(square);
+
+        // Sliding piece attacks USE THE `occupied` PARAMETER
+        attackers |= bishops & Self::get_bishop_attacks(square, occupied);
+        attackers |= rooks & Self::get_rook_attacks(square, occupied);
+        attackers |= queens
+            & (Self::get_rook_attacks(square, occupied)
+                | Self::get_bishop_attacks(square, occupied));
+
+        attackers
+    }
 }
 
 // Noraml setup for a normal game

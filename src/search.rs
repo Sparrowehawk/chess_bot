@@ -8,7 +8,7 @@ use std::time::Instant;
 const MAX_LMR_DEPTH: usize = 64;
 const MAX_LMR_MOVES: usize = 64;
 
-const MATE_SCORE: i32 = 1000000;
+const MATE_SCORE: i32 = i32::MAX;
 const MATE_THRESHOLD: i32 = MATE_SCORE / 2;
 const TEMPO_BONUS: i32 = 10;
 
@@ -23,6 +23,7 @@ type KillerMove = Option<(usize, usize, Option<Piece>)>;
 static LMR_TABLE: [[u8; MAX_LMR_MOVES]; MAX_LMR_DEPTH] =
     unsafe { std::mem::transmute(*include_bytes!(concat!(env!("OUT_DIR"), "/lmr.bin"))) };
 pub struct Search {
+    pub nodes_searched: u64,
     killer_moves: [[KillerMove; 2]; MAX_PLY],
     history: [[i32; 64]; 12],
 }
@@ -30,6 +31,7 @@ pub struct Search {
 impl Default for Search {
     fn default() -> Self {
         Self {
+            nodes_searched: 0,
             killer_moves: [[None; 2]; MAX_PLY],
             history: [[0; 64]; 12],
         }
@@ -182,13 +184,14 @@ impl Game {
             best_score = score;
 
             if stop_signal.load(Ordering::Relaxed) {
+                println!("STOPPED");
                 break;
             }
 
             let mut pv = Vec::new();
             let mut temp_game = self.clone(); // Create a temporary board to walk the PV
             for _ in 0..depth {
-                let entry = temp_game.tt.lock().unwrap().probe(temp_game.zobrist_hash);
+                let entry = self.tt.lock().unwrap().probe(temp_game.zobrist_hash);
                 if let Some(entry) = entry {
                     if let Some(mv) = entry.best_move {
                         pv.push(mv);
@@ -201,8 +204,11 @@ impl Game {
                 }
             }
 
-            // The best move is the first move of our reconstructed PV
-            best_move = pv.first().copied();
+            if !pv.is_empty() {
+                best_move = pv.first().copied();
+            } else if let Some(entry) = self.tt.lock().unwrap().probe(self.zobrist_hash) {
+                best_move = entry.best_move;
+            }
 
             let pv_string = pv
                 .iter()
@@ -214,20 +220,27 @@ impl Game {
                 let mate_in = (MATE_SCORE - best_score.abs() + 1) / 2;
                 let sign = if best_score > 0 { "" } else { "-" };
                 println!(
-                    "info depth {depth} score mate {sign}{mate_in} time {} pv {pv_string}",
-                    duration.as_millis()
+                    "depth {depth} score mate {sign}{mate_in} time {} nodes {} pv {pv_string}",
+                    duration.as_millis(),
+                    search_helper.nodes_searched
                 );
             } else {
                 println!(
-                    "info depth {depth} score cp {best_score} time {} pv {pv_string}",
-                    duration.as_millis()
+                    "depth {depth} score cp {best_score} time {} nodes {} pv {pv_string}",
+                    duration.as_millis(),
+                    search_helper.nodes_searched
                 );
             }
 
             if best_score >= MATE_SCORE - (max_depth as i32) {
+                println!("STOPPED2");
                 break;
             }
         }
+        if best_move.is_none() {
+            println!("{:?}", self.generate_legal_moves());
+        }
+
         (best_move, best_score)
     }
 
@@ -266,6 +279,7 @@ impl Game {
         stop_signal: &Arc<AtomicBool>,
         search_helper: &mut Search,
     ) -> i32 {
+        search_helper.nodes_searched += 1;
         // self.check_board_integrity("search entry");
         if depth == 0 {
             return self.quiescence_search(alpha, beta, search_helper);
@@ -286,6 +300,9 @@ impl Game {
                 }
             }
         }
+
+        let in_check = self.is_in_check();
+        let effective_depth = if in_check { depth + 1 } else { depth };
 
         let mut moves = self.generate_legal_moves();
 
@@ -323,17 +340,29 @@ impl Game {
             }
 
             // Just for now dw
-            let mut temp_game = self.clone();
-            if !temp_game.make_move(m.0, m.1, m.2) {
-                println!("❌ Warning: move {m:?} rejected by make_move but still being searched");
-                // You should skip this move:
-                continue;
-            }
+            // let mut temp_game = self.clone();
+            // if !temp_game.make_move(m.0, m.1, m.2) {
+            //     println!("❌ Warning: move {m:?} rejected by make_move but still being searched");
+            //     // You should skip this move:
+            //     continue;
+            // }
 
             let piece = self.get_piece_at(m.0);
 
             // This is modifying m?
             let undo = self.make_move_unchecked(m.0, m.1, m.2);
+
+            let king_square = if !self.is_white_turn {
+                self.board.white_king
+            } else {
+                self.board.black_king
+            }
+            .trailing_zeros() as usize;
+            if self.board.possible_check(king_square, self.is_white_turn) {
+                // King is in check, so this move was illegal. Unmake it and skip.
+                self.unmake_move(undo);
+                continue;
+            }
 
             // Not affected by this
             let score = if reduce > 0 && depth > 2 {
@@ -392,7 +421,20 @@ impl Game {
     }
 
     fn quiescence_search(&mut self, mut alpha: i32, beta: i32, search_helper: &mut Search) -> i32 {
-        let stand_pat = self.eval();
+        search_helper.nodes_searched += 1;
+        let tt_entry = self.tt.lock().unwrap().probe(self.zobrist_hash);
+        let stand_pat = if let Some(entry) = tt_entry {
+            // We only trust the TT score if it's an EXACT score.
+            // For lower/upper bounds, we should re-evaluate to get a more precise score.
+            if entry.flag == Flag::Exact {
+                entry.score
+            } else {
+                self.eval() // Fallback to fresh evaluation
+            }
+        } else {
+            self.eval() // No TT entry, so evaluate from scratch
+        };
+
         if stand_pat >= beta {
             return beta;
         }
@@ -406,13 +448,12 @@ impl Game {
             self.board.white_pieces()
         };
         let mut moves = self.generate_legal_moves();
-        moves.retain(|&(_, to, _)| (1u64 << to) & enemy_pieces != 0);
-
+        moves.retain(|&(_, to, promo)| ((1u64 << to) & enemy_pieces != 0) || promo.is_some());
         let ply = self.ply() as usize;
         moves.sort_by_cached_key(|m| -(self.score_move(*m, ply, search_helper)));
 
         for m in moves.iter() {
-            if self.static_exchange_loses(m.0, m.1) {
+            if self.static_exchange_exchange(m.0, m.1) < 0 {
                 continue;
             }
 
@@ -430,75 +471,54 @@ impl Game {
         alpha
     }
 
-    fn static_exchange_loses(&self, from: usize, to: usize) -> bool {
-        let mut occupied = self.board.all_pieces();
-        let mut white_attackers = self.board.attackers_to(to, true);
-        let mut black_attackers = self.board.attackers_to(to, false);
-
+    fn static_exchange_exchange(&self, from: usize, to: usize) -> i32 {
         let mut gain = [0i32; 32];
         let mut depth = 0;
 
-        // Who's turn is it?
-        let mut side = self.is_white_turn;
+        let mut occupied = self.board.all_pieces();
 
-        // Get initial attacker and victim
-        let mut piece = self.get_piece_at(from).unwrap();
-        gain[0] = PIECE_VALUES[self.get_piece_at(to).unwrap() as usize];
+        let Some(mut side) = Some(self.is_white_turn) else {
+            return 0;
+        };
 
-        // Remove the initial attacker from the board
-        occupied &= !(1u64 << from);
-        if side {
-            white_attackers &= !(1u64 << from);
-        } else {
-            black_attackers &= !(1u64 << from);
-        }
+        let Some(attacked_piece) = self.get_piece_at(to) else {
+            return 0;
+        };
+        gain[0] = PIECE_VALUES[attacked_piece as usize];
 
-        side = !side;
+        let from_mask = 1u64 << from;
+        occupied &= !from_mask; // remove attacker from occupancy
 
+        let mut used_attackers = from_mask;
+
+        side = !side; // after initial capture, switch side
+
+        // simulate exchanges
         loop {
-            depth += 1;
-            gain[depth] = PIECE_VALUES[piece as usize] - gain[depth - 1];
+            let current_attackers = self.board.attackers_to(to, side) & occupied & !used_attackers;
 
-            // Decide which side moves next
-            let next_attackers = if side {
-                white_attackers
-            } else {
-                black_attackers
+            let Some(sq) = self.least_valuable_piece(current_attackers, side) else {
+                break;
             };
 
-            if next_attackers == 0 {
-                break;
-            }
+            let piece = self.get_piece_at(sq).unwrap();
+            depth += 1;
 
-            // Pick least valuable attacker
-            let next_attacker_sq = Self::least_valuable_piece(self, next_attackers, side);
-            if let Some(sq) = next_attacker_sq {
-                piece = self.get_piece_at(sq).unwrap();
-                occupied &= !(1u64 << sq);
+            gain[depth] = PIECE_VALUES[piece as usize] - gain[depth - 1];
 
-                if side {
-                    white_attackers &= !(1u64 << sq);
-                } else {
-                    black_attackers &= !(1u64 << sq);
-                }
+            occupied &= !(1u64 << sq);
+            used_attackers |= 1u64 << sq;
 
-                // Recalculate x-ray attackers (simplified)
-                // If sliding pieces are behind the target square, re-add them
-                // (Optional and complex, can be skipped for speed)
-
-                side = !side;
-            } else {
-                break;
-            }
+            side = !side;
         }
 
-        // Backward evaluation: assume opponent makes best choices
+        // back-propagate minimax values
         while depth > 0 {
             depth -= 1;
             gain[depth] = -gain[depth + 1].max(-gain[depth]);
         }
 
-        gain[0] < 0
+        gain[0]
     }
 
     fn least_valuable_piece(&self, attackers: u64, is_white: bool) -> Option<usize> {
@@ -542,14 +562,6 @@ impl Game {
                     board.white_queen
                 } else {
                     board.black_queen
-                },
-            ),
-            (
-                Piece::King,
-                if is_white {
-                    board.white_king
-                } else {
-                    board.black_king
                 },
             ),
         ];
@@ -635,7 +647,7 @@ impl Game {
         let (white_mg, white_eg, white_phase) = self.calculate_score(true);
         let (black_mg, black_eg, black_phase) = self.calculate_score(false);
 
-        let total_phase = (white_phase + black_phase).min(MAX_PHASE);
+        let total_phase = (white_phase + black_phase).clamp(0, MAX_PHASE);
         let mg_score = white_mg - black_mg;
         let eg_score = white_eg - black_eg;
 
@@ -733,10 +745,21 @@ impl Game {
         mg_score += rook_mg;
         eg_score += rook_eg;
 
-        // Future additions could include:
-        // - King Safety
-        // - Mobility
-        // - Threats
+        let (threats_mg, threats_eg) = self.evaluate_threats(friend_pawns, is_white);
+        mg_score += threats_mg;
+        eg_score += threats_eg;
+
+        let (hanging_mg, hanging_eg) = self.evaluate_hanging_pieces(is_white);
+        mg_score += hanging_mg;
+        eg_score += hanging_eg;
+
+        let (pin_mg, pin_eg) = self.evaluate_pins(is_white);
+        mg_score += pin_mg;
+        eg_score += pin_eg;
+
+        let (king_mg, king_eg) = self.evaluate_king_safety(is_white);
+        mg_score += king_mg;
+        eg_score += king_eg;
 
         (mg_score, eg_score, phase_score)
     }
@@ -772,7 +795,7 @@ impl Game {
             }
 
             // Bonus for passed pawns (no enemy pawns in front)
-            if self.is_passed(square, is_white, foe_pawns) {
+            if self.is_passed(square, is_white) {
                 let rank = if is_white {
                     square / 8
                 } else {
@@ -789,23 +812,22 @@ impl Game {
         (mg, eg)
     }
 
-    fn is_passed(&self, square: usize, is_white: bool, foe_pawns: u64) -> bool {
+    fn is_passed(&self, square: usize, is_white: bool) -> bool {
         let file = square % 8;
         let rank = square / 8;
-
-        let mut front_mask = FILE_MASKS[file];
-        let mut adjacent_mask = ADJACENT_FILES_MASKS[file];
-
-        if is_white {
-            front_mask <<= (rank + 1) * 8;
-            adjacent_mask <<= (rank + 1) * 8;
+        let foe_pawns = if is_white {
+            self.board.black_pawns
         } else {
-            front_mask >>= (8 - rank) * 8;
-            adjacent_mask >>= (8 - rank) * 8;
-        }
+            self.board.white_pawns
+        };
 
-        let combined_mask = front_mask | adjacent_mask;
-        (foe_pawns & combined_mask) == 0
+        let mask = if is_white {
+            PASSED_WHITE_MASKS[file][rank]
+        } else {
+            PASSED_BLACK_MASKS[file][rank]
+        };
+
+        (foe_pawns & mask) == 0
     }
 
     fn evaluate_rooks(&self, friend_rooks: u64, friend_pawns: u64, foe_pawns: u64) -> (i32, i32) {
@@ -837,9 +859,214 @@ impl Game {
         (mg, eg)
     }
 
+    fn evaluate_threats(&self, friend_pawns: u64, is_white: bool) -> (i32, i32) {
+        let board = &self.board;
+
+        let (foe_knights, foe_bishops, foe_rooks, foe_queens) = if is_white {
+            (
+                board.black_knight,
+                board.black_bishop,
+                board.black_rook,
+                board.black_queen,
+            )
+        } else {
+            (
+                board.white_knight,
+                board.white_bishop,
+                board.white_rook,
+                board.white_queen,
+            )
+        };
+
+        let attacks = if is_white {
+            (friend_pawns << 7 & !FILE_MASKS[7]) | (friend_pawns << 9 & !FILE_MASKS[0])
+        } else {
+            (friend_pawns >> 7 & !FILE_MASKS[0]) | (friend_pawns >> 9 & !FILE_MASKS[7])
+        };
+
+        let mut mg_score = 0;
+        let mut eg_score = 0;
+
+        // Heuristic threat bonuses (middlegame, endgame)
+        let knight_threat = (15, 10);
+        let bishop_threat = (20, 15);
+        let rook_threat = (30, 25);
+        let queen_threat = (40, 35);
+
+        mg_score += knight_threat.0 * (attacks & foe_knights).count_ones() as i32;
+        eg_score += knight_threat.1 * (attacks & foe_knights).count_ones() as i32;
+
+        mg_score += bishop_threat.0 * (attacks & foe_bishops).count_ones() as i32;
+        eg_score += bishop_threat.1 * (attacks & foe_bishops).count_ones() as i32;
+
+        mg_score += rook_threat.0 * (attacks & foe_rooks).count_ones() as i32;
+        eg_score += rook_threat.1 * (attacks & foe_rooks).count_ones() as i32;
+
+        mg_score += queen_threat.0 * (attacks & foe_queens).count_ones() as i32;
+        eg_score += queen_threat.1 * (attacks & foe_queens).count_ones() as i32;
+
+        (mg_score, eg_score)
+    }
+
+    fn evaluate_hanging_pieces(&self, is_white: bool) -> (i32, i32) {
+        let mut mg_penalty = 0;
+        let mut eg_penalty = 0;
+
+        // Get the bitboard of all pieces for the side we are evaluating.
+        let friendly_pieces = if is_white {
+            self.board.white_pieces()
+        } else {
+            self.board.black_pieces()
+        };
+
+        let mut temp_bb = friendly_pieces;
+        while temp_bb != 0 {
+            let sq = temp_bb.trailing_zeros() as usize;
+
+            // Check if the piece on this square is attacked by the opponent.
+            let opponent_attackers = self.board.attackers_to(sq, !is_white);
+
+            if opponent_attackers != 0 {
+                // If it is attacked, check if it has any friendly defenders.
+                let friendly_defenders = self.board.attackers_to(sq, is_white);
+
+                if friendly_defenders == 0 {
+                    // This piece is hanging! Apply a penalty.
+                    if let Some(piece) = self.get_piece_at(sq) {
+                        // The penalty can be tuned. These are just example values.
+                        // We typically don't penalize hanging pawns or the king this way.
+                        let penalty = match piece {
+                            Piece::Knight | Piece::Bishop => -50,
+                            Piece::Rook => -80,
+                            Piece::Queen => -100,
+                            _ => 0,
+                        };
+                        mg_penalty += penalty;
+                        eg_penalty += penalty; // Using the same penalty for endgame is fine.
+                    }
+                }
+            }
+
+            temp_bb &= temp_bb - 1; // Move to the next piece.
+        }
+
+        (mg_penalty, eg_penalty)
+    }
+
+    fn evaluate_pins(&self, is_white: bool) -> (i32, i32) {
+        let mut mg_penalty = 0;
+        let mut eg_penalty = 0;
+
+        // Identify the necessary bitboards for the current player
+        let (friendly_pieces, king_sq) = if is_white {
+            (
+                self.board.white_pieces(),
+                self.board.white_king.trailing_zeros() as usize,
+            )
+        } else {
+            (
+                self.board.black_pieces(),
+                self.board.black_king.trailing_zeros() as usize,
+            )
+        };
+
+        // Identify the opponent's sliding pieces (the only ones that can pin)
+        let foe_sliders = if is_white {
+            self.board.black_rook | self.board.black_bishop | self.board.black_queen
+        } else {
+            self.board.white_rook | self.board.white_bishop | self.board.white_queen
+        };
+
+        let occupied = self.board.all_pieces();
+
+        // Iterate through each friendly piece (excluding the king itself)
+        let mut potential_pinned = friendly_pieces & !(1u64 << king_sq);
+        while potential_pinned != 0 {
+            let piece_sq = potential_pinned.trailing_zeros() as usize;
+
+            // Create a hypothetical board with this piece removed
+            let occupied_without_piece = occupied & !(1u64 << piece_sq);
+
+            // Find attackers to the king on this hypothetical board
+            let attackers_to_king =
+                self.board
+                    .attackers_to_with_occupied(king_sq, !is_white, occupied_without_piece);
+
+            // Is the king attacked by a sliding piece now?
+            if (attackers_to_king & foe_sliders) != 0 {
+                // Yes. This means the piece at `piece_sq` is absolutely pinned.
+                // Apply a penalty. This value can be tuned later.
+                mg_penalty -= 25;
+                eg_penalty -= 25;
+            }
+
+            potential_pinned &= potential_pinned - 1; // Move to the next piece
+        }
+
+        (mg_penalty, eg_penalty)
+    }
+
+    fn evaluate_king_safety(&self, is_white: bool) -> (i32, i32) {
+        let king_sq = if is_white {
+            self.board.white_king.trailing_zeros() as usize
+        } else {
+            self.board.black_king.trailing_zeros() as usize
+        };
+
+        let king_file = king_sq % 8;
+        let rank = king_sq / 8;
+
+        // Basic idea: if king is on back rank, check pawn shield
+        let shield_rank = if is_white { 1 } else { 6 };
+        if rank != 0 && rank != 7 {
+            return (0, 0); // king is in the center or midboard (not yet castled)
+        }
+
+        let shield = if is_white {
+            self.board.white_pawns & (0b111 << (shield_rank * 8 + king_file.saturating_sub(1)))
+        } else {
+            self.board.black_pawns & (0b111 << (shield_rank * 8 + king_file.saturating_sub(1)))
+        };
+
+        let penalty = 20 * (3 - shield.count_ones() as i32); // Max 3 missing pawns
+        (-penalty, -penalty)
+    }
+
     fn ply(&self) -> u8 {
         self.position_history.len() as u8
     }
+}
+
+pub static PASSED_WHITE_MASKS: [[u64; 8]; 8] = generate_passed_pawn_masks(true);
+pub static PASSED_BLACK_MASKS: [[u64; 8]; 8] = generate_passed_pawn_masks(false);
+
+const fn generate_passed_pawn_masks(is_white: bool) -> [[u64; 8]; 8] {
+    let mut masks = [[0u64; 8]; 8];
+    let mut file: usize = 0;
+    while file < 8 {
+        let mut rank = 0;
+        while rank < 8 {
+            let mut mask = 0u64;
+            let mut f = file.saturating_sub(1);
+            while f <= file + 1 && f < 8 {
+                let mut r = rank + 1;
+                while r < 8 {
+                    let sq = r * 8 + f;
+                    mask |= 1u64 << sq;
+                    r += 1;
+                }
+                f += 1;
+            }
+            if !is_white {
+                // Mirror vertically for black
+                mask = mask.reverse_bits().rotate_right(56);
+            }
+            masks[file][rank] = mask;
+            rank += 1;
+        }
+        file += 1;
+    }
+    masks
 }
 
 const FILE_MASKS: [u64; 8] = [
