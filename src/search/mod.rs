@@ -66,7 +66,7 @@ impl Search {
     }
 }
 
-pub fn get_piece_value(piece: Piece) -> i32 {
+fn get_piece_value(piece: Piece) -> i32 {
     PIECE_VALUES[piece as usize]
 }
 

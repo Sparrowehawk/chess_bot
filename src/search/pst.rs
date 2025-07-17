@@ -1,4 +1,4 @@
-use crate::{game::Game, search::PIECE_VALUES, Piece};
+use crate::{game::Game,  Piece};
 
 const MG_PAWN_TABLE: [i32; 64] = [
     0, 0, 0, 0, 0, 0, 0, 0, 98, 134, 61, 95, 68, 126, 34, -11, -6, 7, 26, 31, 65, 56, 25, -20, -14,
@@ -166,6 +166,48 @@ pub fn get_piece_at(game: &Game, square: usize) -> Option<Piece> {
     if (game.board.white_king | game.board.black_king) & mask != 0 {
         return Some(Piece::King);
     }
+    None
+}
+
+pub fn get_piece_colour_at(game: &Game, square: usize) -> Option<(Piece, bool)> {
+    let mask = 1u64 << square;
+    if game.board.white_pawns & mask != 0 {
+        return Some((Piece::Pawn, true));
+    }
+    if game.board.black_pawns & mask != 0 {
+        return Some((Piece::Pawn, false));
+    }
+    if game.board.white_knight & mask != 0 {
+        return Some((Piece::Knight, true));
+    }
+    if game.board.black_knight & mask != 0 {
+        return Some((Piece::Knight, false));
+    }
+    if game.board.white_bishop & mask != 0 {
+        return Some((Piece::Bishop, true));
+    }
+    if game.board.black_bishop & mask != 0 {
+        return Some((Piece::Bishop, false));
+    }
+    if game.board.white_rook & mask != 0 {
+        return Some((Piece::Rook, true));
+    }
+    if game.board.black_rook & mask != 0 {
+        return Some((Piece::Rook, false));
+    }
+    if game.board.white_queen & mask != 0 {
+        return Some((Piece::Queen, true));
+    }
+    if game.board.black_queen & mask != 0 {
+        return Some((Piece::Queen, false));
+    }
+    if game.board.white_king & mask != 0 {
+        return Some((Piece::King, true));
+    }
+    if game.board.black_king & mask != 0 {
+        return Some((Piece::King, false));
+    }
+
     None
 }
 

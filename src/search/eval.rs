@@ -1,4 +1,4 @@
-use super::see; // Use `super::` to access a sibling module
+use super::see;
 use super::tt::Flag;
 use crate::game::Game;
 use crate::search::pst::{
@@ -6,7 +6,7 @@ use crate::search::pst::{
     get_piece_at,
 };
 use crate::search::{MAX_PHASE, PHASE_WEIGHTS, PIECE_VALUES, Search, TEMPO_BONUS, pst};
-use crate::{Bitboard, Piece}; // Make sure Search is imported
+use crate::{Bitboard, Piece}; 
 
 pub fn quiescence_search(
     game: &mut Game,
@@ -17,8 +17,6 @@ pub fn quiescence_search(
     search_helper.nodes_searched += 1;
     let tt_entry = game.tt.lock().unwrap().probe(game.zobrist_hash);
     let stand_pat = if let Some(entry) = tt_entry {
-        // We only trust the TT score if it's an EXACT score.
-        // For lower/upper bounds, we should re-evaluate to get a more precise score.
         if entry.flag == Flag::Exact {
             entry.score
         } else {
@@ -86,7 +84,6 @@ fn calculate_score(game: &Game, is_white: bool) -> (i32, i32, i32) {
 
     let board = &game.board;
 
-    // Define friend and foe pieces for clarity
     let (friend_pawns, friend_knights, friend_bishops, friend_rooks, friend_queens, friend_king) =
         if is_white {
             (
@@ -123,7 +120,6 @@ fn calculate_score(game: &Game, is_white: bool) -> (i32, i32, i32) {
         friend_king,
     ];
 
-    // 1. Material and PST scores (your existing logic, with a small bug fix)
     for (piece_idx, &bb) in friend_bitboards.iter().enumerate() {
         let piece_count = bb.count_ones() as i32;
 
@@ -134,7 +130,6 @@ fn calculate_score(game: &Game, is_white: bool) -> (i32, i32, i32) {
         let mut temp_bb = bb;
         while temp_bb != 0 {
             let square = temp_bb.trailing_zeros() as usize;
-            // The board flip for white is correct
             let pst_idx = if is_white { square ^ 56 } else { square };
 
             mg_score += MG_TABLE[piece_idx][pst_idx];
@@ -144,18 +139,15 @@ fn calculate_score(game: &Game, is_white: bool) -> (i32, i32, i32) {
         }
     }
 
-    // 2. Bishop Pair Bonus
     if friend_bishops.count_ones() >= 2 {
-        mg_score += 30; // Middlegame bonus
-        eg_score += 50; // Endgame bonus
+        mg_score += 30; 
+        eg_score += 50; 
     }
 
-    // 3. Pawn Structure Evaluation
     let (pawn_mg, pawn_eg) = evaluate_pawn_structure(game, friend_pawns, is_white);
     mg_score += pawn_mg;
     eg_score += pawn_eg;
 
-    // 4. Rook on Open/Semi-Open File Bonus
     let (rook_mg, rook_eg) = evaluate_rooks(game, friend_rooks, friend_pawns, foe_pawns);
     mg_score += rook_mg;
     eg_score += rook_eg;
@@ -198,13 +190,13 @@ fn evaluate_pawn_structure(game: &Game, friend_pawns: u64, is_white: bool) -> (i
         let square = temp_pawns.trailing_zeros() as usize;
         let file = square % 8;
 
-        // Penalty for isolated pawns (no friendly pawns on adjacent files)
+        // Penalty for isolated pawns 
         if (friend_pawns & ADJACENT_FILES_MASKS[file]) == 0 {
             mg += -15;
             eg += -25;
         }
 
-        // Bonus for passed pawns (no enemy pawns in front)
+        // Bonus for passed pawns 
         if is_passed(game, square, is_white) {
             let rank = if is_white {
                 square / 8
@@ -302,7 +294,7 @@ fn evaluate_threats(game: &Game, friend_pawns: u64, is_white: bool) -> (i32, i32
     let mut mg_score = 0;
     let mut eg_score = 0;
 
-    // Heuristic threat bonuses (middlegame, endgame)
+    // Heuristic threat bonuses for mg and eg
     let knight_threat = (15, 10);
     let bishop_threat = (20, 15);
     let rook_threat = (30, 25);
@@ -327,7 +319,6 @@ fn evaluate_hanging_pieces(game: &Game, is_white: bool) -> (i32, i32) {
     let mut mg_penalty = 0;
     let mut eg_penalty = 0;
 
-    // Get the bitboard of all pieces for the side we are evaluating.
     let friendly_pieces = if is_white {
         game.board.white_pieces()
     } else {
@@ -337,27 +328,24 @@ fn evaluate_hanging_pieces(game: &Game, is_white: bool) -> (i32, i32) {
     let mut temp_bb = friendly_pieces;
     while temp_bb != 0 {
         let sq = temp_bb.trailing_zeros() as usize;
-
-        // Check if the piece on this square is attacked by the opponent.
         let opponent_attackers = attackers_to(&game.board, sq, !is_white);
-
         if opponent_attackers != 0 {
-            // If it is attacked, check if it has any friendly defenders.
+            // If it is attacked, check if it has any defenders
             let friendly_defenders = attackers_to(&game.board, sq, is_white);
 
             if friendly_defenders == 0 {
-                // This piece is hanging! Apply a penalty.
+                // Piece is hanging, apply penalty
                 if let Some(piece) = get_piece_at(game, sq) {
-                    // The penalty can be tuned. These are just example values.
-                    // We typically don't penalize hanging pawns or the king this way.
+
                     let penalty = match piece {
-                        Piece::Knight | Piece::Bishop => -50,
-                        Piece::Rook => -80,
-                        Piece::Queen => -100,
+                        Piece::Knight => -50,
+                        Piece::Bishop => -60,
+                        Piece::Rook => -85,
+                        Piece::Queen => -120,
                         _ => 0,
                     };
                     mg_penalty += penalty;
-                    eg_penalty += penalty; // Using the same penalty for endgame is fine.
+                    eg_penalty += penalty;
                 }
             }
         }
@@ -391,18 +379,19 @@ pub fn attackers_to(board: &Bitboard, square: usize, is_white: bool) -> u64 {
     };
 
     let mut attackers = 0;
+
     attackers |= pawns & Bitboard::get_pawn_attacks(is_white as usize, square);
     attackers |= knights & board.get_knight_attacks(square);
+    attackers |= king & board.get_king_attacks(square);
     attackers |= bishops & Bitboard::get_bishop_attacks(square, occupied);
     attackers |= rooks & Bitboard::get_rook_attacks(square, occupied);
-    attackers |= queens & Bitboard::get_rook_attacks(square, occupied)
-        | Bitboard::get_bishop_attacks(square, occupied);
-    attackers |= king & board.get_king_attacks(square);
+    attackers |= queens
+        & (Bitboard::get_rook_attacks(square, occupied) | Bitboard::get_bishop_attacks(square, occupied));
+
     attackers
 }
 
 fn attackers_to_with_occupied(board: &Bitboard, square: usize, is_white: bool, occupied: u64) -> u64 {
-    // Note: We use the `occupied` parameter instead of calling `self.all_pieces()`
     let (pawns, knights, bishops, rooks, queens, king) = if is_white {
         (
             board.white_pawns,
@@ -424,14 +413,10 @@ fn attackers_to_with_occupied(board: &Bitboard, square: usize, is_white: bool, o
     };
 
     let mut attackers = 0;
-    // Pawn attacks don't depend on occupancy
-    attackers |= pawns & Bitboard::get_pawn_attacks(is_white as usize, square);
 
-    // Knight and King attacks also don't depend on occupancy
+    attackers |= pawns & Bitboard::get_pawn_attacks(is_white as usize, square);
     attackers |= knights & board.get_knight_attacks(square);
     attackers |= king & board.get_king_attacks(square);
-
-    // Sliding piece attacks USE THE `occupied` PARAMETER
     attackers |= bishops & Bitboard::get_bishop_attacks(square, occupied);
     attackers |= rooks & Bitboard::get_rook_attacks(square, occupied);
     attackers |= queens
@@ -444,7 +429,6 @@ fn evaluate_pins(game: &Game, is_white: bool) -> (i32, i32) {
     let mut mg_penalty = 0;
     let mut eg_penalty = 0;
 
-    // Identify the necessary bitboards for the current player
     let (friendly_pieces, king_sq) = if is_white {
         (
             game.board.white_pieces(),
@@ -457,7 +441,7 @@ fn evaluate_pins(game: &Game, is_white: bool) -> (i32, i32) {
         )
     };
 
-    // Identify the opponent's sliding pieces (the only ones that can pin)
+    // Identify sliding pieces
     let foe_sliders = if is_white {
         game.board.black_rook | game.board.black_bishop | game.board.black_queen
     } else {
@@ -466,22 +450,18 @@ fn evaluate_pins(game: &Game, is_white: bool) -> (i32, i32) {
 
     let occupied = game.board.all_pieces();
 
-    // Iterate through each friendly piece (excluding the king itgame)
+    // Iterate through each friendly piece (excluding the king)
     let mut potential_pinned = friendly_pieces & !(1u64 << king_sq);
     while potential_pinned != 0 {
         let piece_sq = potential_pinned.trailing_zeros() as usize;
 
-        // Create a hypothetical board with this piece removed
+        // Create a hypothetical board with this piece removed and find attackers
         let occupied_without_piece = occupied & !(1u64 << piece_sq);
-
-        // Find attackers to the king on this hypothetical board
         let attackers_to_king =
             attackers_to_with_occupied(&game.board, king_sq, !is_white, occupied_without_piece);
 
-        // Is the king attacked by a sliding piece now?
+        // Is attacked by sliding piece?
         if (attackers_to_king & foe_sliders) != 0 {
-            // Yes. This means the piece at `piece_sq` is absolutely pinned.
-            // Apply a penalty. This value can be tuned later.
             mg_penalty -= 25;
             eg_penalty -= 25;
         }
@@ -502,7 +482,7 @@ fn evaluate_king_safety(game: &Game, is_white: bool) -> (i32, i32) {
     let king_file = king_sq % 8;
     let rank = king_sq / 8;
 
-    // Basic idea: if king is on back rank, check pawn shield
+    // if king is on back rank, check pawn shield
     let shield_rank = if is_white { 1 } else { 6 };
     if rank != 0 && rank != 7 {
         return (0, 0); // king is in the center or midboard (not yet castled)

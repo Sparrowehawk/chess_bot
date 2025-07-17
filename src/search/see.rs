@@ -1,4 +1,4 @@
-use crate::{game::Game, search::{eval, pst, Search, KILLER_MOVE_SCORE, MAX_PLY, PIECE_VALUES}, Piece};
+use crate::{game::Game, search::{eval, get_piece_value, pst, Search, KILLER_MOVE_SCORE, MAX_PLY, PIECE_VALUES}, Piece};
 
 pub fn static_exchange_exchange(game: &Game, from: usize, to: usize) -> i32 {
     let mut gain = [0i32; 32];
@@ -115,9 +115,9 @@ pub fn score_move(
 
     if let Some(p) = promo {
         return match p {
-            Piece::Queen => 20000 + pst::get_piece_value(p),
-            Piece::Knight => 15000 + pst::get_piece_value(p),
-            _ => 10000 + pst::get_piece_value(p),
+            Piece::Queen => 20000 + get_piece_value(p),
+            Piece::Knight => 15000 + get_piece_value(p),
+            _ => 10000 + get_piece_value(p),
         };
     }
 
@@ -130,7 +130,7 @@ pub fn score_move(
     if (1u64 << to) & enemy_pieces != 0 {
         let attacker = pst::get_piece_at(game, from).unwrap_or(Piece::Pawn);
         let victim = pst::get_piece_at(game, to).unwrap_or(Piece::Pawn);
-        return 10000 + pst::get_piece_value(victim) - pst::get_piece_value(attacker);
+        return 10000 + get_piece_value(victim) - get_piece_value(attacker);
     }
 
     if ply < MAX_PLY {

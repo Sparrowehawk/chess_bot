@@ -4,17 +4,17 @@ pub mod rook_magics;
 // Precaluated knight and king on compile time
 // Sliders are compiled and calculated pre compile into magic bitmaps
 
-pub const KNIGHT_ATTACKS: [u64; 64] = precalculate_knight_attacks();
-pub const KING_ATTACKS: [u64; 64] = precalculate_king_attacks();
-pub const PAWN_ATTACKS: [[u64; 64]; 2] = precalculate_pawn_attacks();
-pub const PAWN_PUSHES: [[u64; 64]; 2] = precalculate_pawn_pushes();
+pub static  KNIGHT_ATTACKS: [u64; 64] = precalculate_knight_attacks();
+pub static KING_ATTACKS: [u64; 64] = precalculate_king_attacks();
+pub static PAWN_ATTACKS: [[u64; 64]; 2] = precalculate_pawn_attacks();
+pub static PAWN_PUSHES: [[u64; 64]; 2] = precalculate_pawn_pushes();
 
-const FILE_A: u64 = 0x0101010101010101;
-const FILE_B: u64 = 0x0202020202020202;
-const FILE_G: u64 = 0x4040404040404040;
-const FILE_H: u64 = 0x8080808080808080;
-const RANK_2: u64 = 0x000000000000FF00;
-const RANK_7: u64 = 0x00FF000000000000;
+static FILE_A: u64 = 0x0101010101010101;
+static FILE_B: u64 = 0x0202020202020202;
+static FILE_G: u64 = 0x4040404040404040;
+static FILE_H: u64 = 0x8080808080808080;
+static RANK_2: u64 = 0x000000000000FF00;
+static RANK_7: u64 = 0x00FF000000000000;
 
 const fn shift(bitboard: u64, shift: i8) -> u64 {
     if shift > 0 {

@@ -91,9 +91,8 @@ impl Bitboard {
             )
         };
 
-        // Note: The colour parameter for pawn attacks is inverted because we are checking
-        // attacks FROM the opponent.
-        if (Self::get_pawn_attacks(if attacker_is_white { 0 } else { 1 }, position) & opponent_pawn)
+
+        if (Self::get_pawn_attacks(if attacker_is_white { 1 } else { 0 }, position) & opponent_pawn)
             != 0
         {
             return true;
