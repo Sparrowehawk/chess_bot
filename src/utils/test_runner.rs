@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use crate::Game;
 
+
 /// Reads the test file line by line and executes the perft tests.
 pub fn run_tests<P: AsRef<Path>>(path: P) -> io::Result<()> {
     let file = File::open(path)?;
@@ -45,7 +46,7 @@ pub fn run_tests<P: AsRef<Path>>(path: P) -> io::Result<()> {
 
                     // Run the perft test.
                     let start_time = Instant::now();
-                    let actual_nodes = game.perft(depth);
+                    let actual_nodes = Game::perft(&mut game, depth);
                     let duration = start_time.elapsed();
 
                     // Compare results and print PASS or FAIL.

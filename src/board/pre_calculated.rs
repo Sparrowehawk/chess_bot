@@ -1,14 +1,13 @@
-use crate::Bitboard;
 pub mod bishop_magics;
 pub mod rook_magics;
 
 // Precaluated knight and king on compile time
 // Sliders are compiled and calculated pre compile into magic bitmaps
 
-const KNIGHT_ATTACKS: [u64; 64] = precalculate_knight_attacks();
-const KING_ATTACKS: [u64; 64] = precalculate_king_attacks();
-const PAWN_ATTACKS: [[u64; 64]; 2] = precalculate_pawn_attacks();
-const PAWN_PUSHES: [[u64; 64]; 2] = precalculate_pawn_pushes();
+pub const KNIGHT_ATTACKS: [u64; 64] = precalculate_knight_attacks();
+pub const KING_ATTACKS: [u64; 64] = precalculate_king_attacks();
+pub const PAWN_ATTACKS: [[u64; 64]; 2] = precalculate_pawn_attacks();
+pub const PAWN_PUSHES: [[u64; 64]; 2] = precalculate_pawn_pushes();
 
 const FILE_A: u64 = 0x0101010101010101;
 const FILE_B: u64 = 0x0202020202020202;
@@ -147,36 +146,3 @@ const fn precalculate_king_attacks() -> [u64; 64] {
     attacks
 }
 
-impl Bitboard {
-    pub fn get_knight_attacks(&self, from: usize) -> u64 {
-        KNIGHT_ATTACKS[from]
-    }
-
-    pub fn get_king_attacks(&self, from: usize) -> u64 {
-        KING_ATTACKS[from]
-    }
-
-    pub fn get_bishop_attacks(square: usize, all_pieces: u64) -> u64 {
-        let blockers = all_pieces & bishop_magics::BISHOP_MASKS[square];
-        let magic_index = (blockers.wrapping_mul(bishop_magics::BISHOP_MAGICS[square])
-            >> bishop_magics::BISHOP_SHIFTS[square]) as usize;
-        let offset = bishop_magics::BISHOP_OFFSETS[square];
-        bishop_magics::BISHOP_ATTACKS[offset + magic_index]
-    }
-
-    pub fn get_rook_attacks(square: usize, all_pieces: u64) -> u64 {
-        let blockers = all_pieces & rook_magics::ROOK_MASKS[square];
-        let magic_index = (blockers.wrapping_mul(rook_magics::ROOK_MAGIC[square])
-            >> rook_magics::ROOK_SHIFTS[square]) as usize;
-        let offset = rook_magics::ROOK_OFFSETS[square];
-        rook_magics::ROOK_ATTACKS[offset + magic_index]
-    }
-
-    pub fn get_pawn_attacks(colour: usize, from: usize) -> u64 {
-        PAWN_ATTACKS[colour][from]
-    }
-
-    pub fn get_pawn_pushes(colour: usize, from: usize) -> u64 {
-        PAWN_PUSHES[colour][from]
-    }
-}

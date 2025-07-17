@@ -1,5 +1,4 @@
-use crate::game::Game;
-use crate::bitboard::Piece;
+use crate::{game::Game, Piece};
 
 impl Game {
     pub fn perft(&mut self, depth: u32) -> u64 {

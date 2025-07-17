@@ -1,5 +1,6 @@
-use crate::bitboard::Piece;
 use std::collections::HashMap;
+
+use crate::Piece;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Flag {

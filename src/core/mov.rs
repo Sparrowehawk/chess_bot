@@ -1,5 +1,7 @@
-use crate::bitboard::Piece;
 use std::slice::Iter;
+
+use crate::Piece;
+
 
 #[derive(Clone, Debug)]
 pub struct MoveList {

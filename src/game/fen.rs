@@ -1,18 +1,10 @@
-use crate::{Game, bitboard::Bitboard, transposition_table::TranspositionTable};
 use std::collections::HashMap; // Ensure HashMap is in scope if not already.
 use std::sync::{Arc, Mutex};
 
+use crate::search::tt::TranspositionTable;
+use crate::{Bitboard, Game};
+
 impl Game {
-    /// Creates a new Game instance from a FEN string.
-    /// This is essential for setting up specific test positions.
-    ///
-    /// # Arguments
-    ///
-    /// * `fen` - A string slice that holds the FEN notation.
-    ///
-    /// # Returns
-    ///
-    /// * `Result<Self, &'static str>` - A new Game instance or an error message if the FEN is invalid.
     pub fn from_fen(fen: &str) -> Result<Self, &'static str> {
         let mut board = Bitboard::empty(); // Start with an empty board
         let parts: Vec<&str> = fen.split_whitespace().collect();

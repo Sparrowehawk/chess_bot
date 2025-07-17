@@ -1,5 +1,4 @@
 use crate::game::Game;
-use crate::parser::parse_move;
 use std::io::{self, BufRead};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -113,7 +112,7 @@ impl Uci {
         if tokens.get(current_index) == Some(&"moves") {
             current_index += 1;
             for move_str in &tokens[current_index..] {
-                if let Some((from, to, promo)) = parse_move(move_str) {
+                if let Some((from, to, promo)) = crate::game::Game::parse_move(move_str) {
                     self.game.make_move(from, to, promo);
                 }
             }
@@ -147,7 +146,7 @@ impl Uci {
 
         self.search_thread = Some(thread::spawn(move || {
             // --- USE THE PARSED `depth` VARIABLE ---
-            let (best_move, _) = game_clone.find_best_move(depth, &stop_clone);
+            let (best_move, _) = crate::search::find_best_move(&mut game_clone, depth, &stop_clone);
 
             if let Some((from, to, promo)) = best_move {
                 let move_str = format!(

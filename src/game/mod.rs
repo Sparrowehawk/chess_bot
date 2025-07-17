@@ -1,8 +1,13 @@
-use crate::bitboard::{Bitboard, Piece};
-use crate::movelist::MoveList;
-use crate::transposition_table::TranspositionTable;
-use crate::zobrist::ZobristKeys;
-use array_init;
+pub mod fen;
+pub mod perft;
+
+use crate::board::Bitboard;
+use crate::board::display::print_board;
+use crate::board::movegen::generate_pseudo_legal_moves;
+use crate::search::pst::get_piece_at;
+use crate::search::tt::TranspositionTable;
+use crate::search::zobrist::{ZobristKeys, compute_zobrist_hash};
+use crate::{MoveList, Piece}; // Import Bitboard from the appropriate module
 use once_cell::sync::Lazy;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -14,7 +19,6 @@ use std::{
 
 pub static ZOBRIST_KEYS: Lazy<ZobristKeys> = Lazy::new(ZobristKeys::new);
 
-use crate::parser::parse_move;
 #[derive(Clone)]
 pub struct Game {
     pub board: Bitboard,
@@ -57,7 +61,7 @@ impl Default for Game {
             zobrist_hash: 0,
         };
         let mut game = game;
-        game.zobrist_hash = game.compute_zobrist_hash();
+        game.zobrist_hash = compute_zobrist_hash(game.clone());
         game
     }
 }
@@ -189,7 +193,7 @@ impl Game {
 
     pub fn generate_legal_moves(&self) -> MoveList {
         let mut legal_moves = MoveList::new();
-        let pseudo_legal_moves = self.generate_pseudo_legal_moves();
+        let pseudo_legal_moves = generate_pseudo_legal_moves(self);
 
         for &(from, to, promo) in pseudo_legal_moves.iter() {
             let mut temp_game = self.clone();
@@ -229,49 +233,8 @@ impl Game {
         }
     }
 
-    fn get_piece_and_color(&self, square: usize) -> (Option<Piece>, Option<bool>) {
-        let mask = 1u64 << square;
-        if (self.board.white_pawns & mask) != 0 {
-            return (Some(Piece::Pawn), Some(true));
-        }
-        if (self.board.black_pawns & mask) != 0 {
-            return (Some(Piece::Pawn), Some(false));
-        }
-        if (self.board.white_knight & mask) != 0 {
-            return (Some(Piece::Knight), Some(true));
-        }
-        if (self.board.black_knight & mask) != 0 {
-            return (Some(Piece::Knight), Some(false));
-        }
-        if (self.board.white_bishop & mask) != 0 {
-            return (Some(Piece::Bishop), Some(true));
-        }
-        if (self.board.black_bishop & mask) != 0 {
-            return (Some(Piece::Bishop), Some(false));
-        }
-        if (self.board.white_rook & mask) != 0 {
-            return (Some(Piece::Rook), Some(true));
-        }
-        if (self.board.black_rook & mask) != 0 {
-            return (Some(Piece::Rook), Some(false));
-        }
-        if (self.board.white_queen & mask) != 0 {
-            return (Some(Piece::Queen), Some(true));
-        }
-        if (self.board.black_queen & mask) != 0 {
-            return (Some(Piece::Queen), Some(false));
-        }
-        if (self.board.white_king & mask) != 0 {
-            return (Some(Piece::King), Some(true));
-        }
-        if (self.board.black_king & mask) != 0 {
-            return (Some(Piece::King), Some(false));
-        }
-        (None, None)
-    }
-
     pub fn make_move_unchecked(&mut self, from: usize, to: usize, promo: Option<Piece>) -> Undo {
-        let piece_moving = self.get_piece_at(from).expect("No piece on 'from' square");
+        let piece_moving = get_piece_at(self, from).expect("No piece on 'from' square");
         let side = if self.is_white_turn { 0 } else { 1 }; // 0 = white, 1 = black
         let opponent_side = 1 - side;
 
@@ -279,7 +242,7 @@ impl Game {
         let previous_castling = self.castling;
         let previous_hash = self.zobrist_hash;
 
-        let mut captured_piece = self.get_piece_at(to);
+        let mut captured_piece = get_piece_at(self, to);
 
         let is_en_passant = piece_moving == Piece::Pawn && Some(to) == previous_en_passant;
         if is_en_passant {
@@ -381,76 +344,76 @@ impl Game {
         undo
     }
 
-pub fn unmake_move(&mut self, undo: Undo) {
-    // Restore the high-level game state first.
-    self.is_white_turn = !self.is_white_turn; // Flip the turn back to the player who made the move.
-    self.castling = undo.previous_castling_rights;
-    self.en_passent = undo.previous_en_passant_square;
+    pub fn unmake_move(&mut self, undo: Undo) {
+        // Restore the high-level game state first.
+        self.is_white_turn = !self.is_white_turn; // Flip the turn back to the player who made the move.
+        self.castling = undo.previous_castling_rights;
+        self.en_passent = undo.previous_en_passant_square;
 
-    // The color of the side that we are "un-moving" for.
-    let color_that_moved = self.is_white_turn;
-    let from = undo.from;
-    let to = undo.to;
+        // The color of the side that we are "un-moving" for.
+        let color_that_moved = self.is_white_turn;
+        let from = undo.from;
+        let to = undo.to;
 
-    // Determine the piece that was on the 'to' square to move it back.
-    // If it was a promotion, the piece type is stored in the undo object.
-    // Otherwise, we look at the board to see what piece is currently on the 'to' square.
-    let moved_piece = undo.promotion.unwrap_or_else(|| {
-        self.get_piece_at(to)
-            .expect("unmake_move: No piece on the 'to' square to unmake.")
-    });
+        // Determine the piece that was on the 'to' square to move it back.
+        // If it was a promotion, the piece type is stored in the undo object.
+        // Otherwise, we look at the board to see what piece is currently on the 'to' square.
+        let moved_piece = undo.promotion.unwrap_or_else(|| {
+            get_piece_at(self, to).expect("unmake_move: No piece on the 'to' square to unmake.")
+        });
 
-    // --- Reverse the piece movement ---
-    // 1. Remove the piece from its destination square ('to').
-    self.remove_piece(to, moved_piece, color_that_moved);
+        // --- Reverse the piece movement ---
+        // 1. Remove the piece from its destination square ('to').
+        self.remove_piece(to, moved_piece, color_that_moved);
 
-    // 2. Add the piece back to its origin square ('from').
-    // If it was a promotion, we add a Pawn back. Otherwise, we add the original piece back.
-    if undo.promotion.is_some() {
-        self.add_piece(from, Piece::Pawn, color_that_moved);
-    } else {
-        self.add_piece(from, moved_piece, color_that_moved);
-    }
-
-    // --- Symmetrically handle special moves ---
-    // 3. If the move was a castle, move the rook back as well.
-    // A castle is identified by the king moving exactly two squares.
-    if moved_piece == Piece::King && (from as i8 - to as i8).abs() == 2 {
-        let (rook_from, rook_to) = match to {
-            62 => (61, 63), // White kingside (King on g1, Rook on f1) -> move Rook f1 to h1
-            58 => (59, 56), // White queenside (King on c1, Rook on d1) -> move Rook d1 to a1
-            6  => (5, 7),   // Black kingside (King on g8, Rook on f8) -> move Rook f8 to h8
-            2  => (3, 0),   // Black queenside (King on c8, Rook on d8) -> move Rook d8 to a8
-            _ => unreachable!("A king move of 2 squares must be a castle."),
-        };
-        // Move the rook back from its post-castle square to its original corner.
-        self.remove_piece(rook_from, Piece::Rook, color_that_moved);
-        self.add_piece(rook_to, Piece::Rook, color_that_moved);
-    }
-
-    // 4. If a piece was captured, add it back to the board.
-    if let Some(captured_piece) = undo.captured_piece {
-        let captured_color = !color_that_moved;
-
-        // The captured piece is on the 'to' square, unless it was an en passant capture.
-        let moved_piece_was_pawn = self.get_piece_at(from) == Some(Piece::Pawn);
-        let is_en_passant_capture = moved_piece_was_pawn && Some(to) == undo.previous_en_passant_square;
-
-        let capture_square = if is_en_passant_capture {
-            // The captured pawn in en passant is on a different rank.
-            if color_that_moved { to - 8 } else { to + 8 }
+        // 2. Add the piece back to its origin square ('from').
+        // If it was a promotion, we add a Pawn back. Otherwise, we add the original piece back.
+        if undo.promotion.is_some() {
+            self.add_piece(from, Piece::Pawn, color_that_moved);
         } else {
-            to
-        };
-        // Add the captured piece back to its square. The `add_piece` function correctly handles
-        // placing a piece on a square that was just vacated.
-        self.add_piece(capture_square, captured_piece, captured_color);
-    }
+            self.add_piece(from, moved_piece, color_that_moved);
+        }
 
-    // Finally, restore the Zobrist hash to its exact previous state.
-    // This is the most robust way to handle hash reversal.
-    self.zobrist_hash = undo.previous_zobrist_hash;
-}
+        // --- Symmetrically handle special moves ---
+        // 3. If the move was a castle, move the rook back as well.
+        // A castle is identified by the king moving exactly two squares.
+        if moved_piece == Piece::King && (from as i8 - to as i8).abs() == 2 {
+            let (rook_from, rook_to) = match to {
+                62 => (61, 63), // White kingside (King on g1, Rook on f1) -> move Rook f1 to h1
+                58 => (59, 56), // White queenside (King on c1, Rook on d1) -> move Rook d1 to a1
+                6 => (5, 7),    // Black kingside (King on g8, Rook on f8) -> move Rook f8 to h8
+                2 => (3, 0),    // Black queenside (King on c8, Rook on d8) -> move Rook d8 to a8
+                _ => unreachable!("A king move of 2 squares must be a castle."),
+            };
+            // Move the rook back from its post-castle square to its original corner.
+            self.remove_piece(rook_from, Piece::Rook, color_that_moved);
+            self.add_piece(rook_to, Piece::Rook, color_that_moved);
+        }
+
+        // 4. If a piece was captured, add it back to the board.
+        if let Some(captured_piece) = undo.captured_piece {
+            let captured_color = !color_that_moved;
+
+            // The captured piece is on the 'to' square, unless it was an en passant capture.
+            let moved_piece_was_pawn = get_piece_at(self, from) == Some(Piece::Pawn);
+            let is_en_passant_capture =
+                moved_piece_was_pawn && Some(to) == undo.previous_en_passant_square;
+
+            let capture_square = if is_en_passant_capture {
+                // The captured pawn in en passant is on a different rank.
+                if color_that_moved { to - 8 } else { to + 8 }
+            } else {
+                to
+            };
+            // Add the captured piece back to its square. The `add_piece` function correctly handles
+            // placing a piece on a square that was just vacated.
+            self.add_piece(capture_square, captured_piece, captured_color);
+        }
+
+        // Finally, restore the Zobrist hash to its exact previous state.
+        // This is the most robust way to handle hash reversal.
+        self.zobrist_hash = undo.previous_zobrist_hash;
+    }
     fn get_piece_bb_mut(&mut self, piece: Piece, is_white: bool) -> &mut u64 {
         match (is_white, piece) {
             (true, Piece::Pawn) => &mut self.board.white_pawns,
@@ -499,12 +462,6 @@ pub fn unmake_move(&mut self, undo: Undo) {
         *bitboard &= !(1u64 << square);
     }
 
-    fn move_piece(&mut self, from: usize, to: usize, piece: Piece, is_white: bool) {
-        let bitboard = self.get_piece_bb_mut(piece, is_white);
-        let move_mask = (1u64 << from) | (1u64 << to);
-        *bitboard ^= move_mask;
-    }
-
     pub fn hash_position(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.board.all_pieces().hash(&mut hasher);
@@ -515,10 +472,47 @@ pub fn unmake_move(&mut self, undo: Undo) {
         hasher.finish()
     }
 
+    pub fn parse_move(input: &str) -> Option<(usize, usize, Option<Piece>)> {
+        if input.len() != 4 && input.len() != 5 {
+            return None;
+        }
+
+        let from_file = input.chars().next()?;
+        let from_rank = input.chars().nth(1)?;
+        let to_file = input.chars().nth(2)?;
+        let to_rank = input.chars().nth(3)?;
+
+        let from_file_idx = (from_file as u8).checked_sub(b'a')? as usize;
+        let from_rank_idx = (from_rank as u8).checked_sub(b'1')? as usize;
+        let to_file_idx = (to_file as u8).checked_sub(b'a')? as usize;
+        let to_rank_idx = (to_rank as u8).checked_sub(b'1')? as usize;
+
+        if from_file_idx > 7 || from_rank_idx > 7 || to_file_idx > 7 || to_rank_idx > 7 {
+            return None;
+        }
+
+        let from_square = from_rank_idx * 8 + from_file_idx;
+        let to_square = to_rank_idx * 8 + to_file_idx;
+
+        let promotion = if input.len() == 5 {
+            match input.chars().nth(4)? {
+                'q' => Some(Piece::Queen),
+                'r' => Some(Piece::Rook),
+                'b' => Some(Piece::Bishop),
+                'n' => Some(Piece::Knight),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        Some((from_square, to_square, promotion))
+    }
+
     // GAME TIME
     pub fn run(&mut self) {
         loop {
-            self.board.print_board();
+            print_board(&self.board);
             self.castling_check();
             match self.game_state() {
                 GameState::Checkmate => {
@@ -557,7 +551,7 @@ pub fn unmake_move(&mut self, undo: Undo) {
                 break;
             }
 
-            match parse_move(trimmed_input) {
+            match Self::parse_move(trimmed_input) {
                 Some((from, to, promo)) => {
                     if self.make_move(from, to, promo) {
                         // If a move is possible, add it to the move history list
